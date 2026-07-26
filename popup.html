@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Memo</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">PROMPT LIBRARY</p>
+        <h1>Prompt Memo</h1>
+      </div>
+      <div class="header-actions">
+        <button id="confirmationSettingsButton" class="button secondary header-button">確認設定</button>
+        <button id="addButton" class="icon-button primary" title="プロンプトを追加" aria-label="プロンプトを追加">＋</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="search-wrap">
+        <span aria-hidden="true">⌕</span>
+        <input id="searchInput" type="search" placeholder="タイトル・本文・タグを検索" autocomplete="off" />
+      </div>
+
+      <nav id="filterBar" aria-label="絞り込み">
+        <button class="filter active" data-filter="favorite">★ お気に入り</button>
+        <button class="filter" data-filter="other">その他</button>
+        <button class="filter" data-filter="tags">タグ別</button>
+      </nav>
+
+      <section id="promptList" aria-live="polite"></section>
+
+      <section id="emptyState" class="empty hidden">
+        <div class="empty-icon">✦</div>
+        <h2 id="emptyTitle">プロンプトがありません</h2>
+        <p id="emptyText">よく使う指示を保存して、いつでも呼び出せます。</p>
+        <button id="emptyAddButton" class="button primary">最初のプロンプトを追加</button>
+      </section>
+
+      <footer>
+        <div class="backup-info">
+          <strong>データ管理</strong>
+        </div>
+        <div class="backup-actions">
+          <button id="exportAllButton" class="button primary compact">エクスポート</button>
+          <button id="importButton" class="button secondary compact">インポート</button>
+        </div>
+        <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
+      </footer>
+    </main>
+
+    <dialog id="editorDialog">
+      <form id="editorForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">PROMPT</p>
+            <h2 id="dialogTitle">新しいプロンプト</h2>
+          </div>
+          <button type="button" id="closeDialog" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+
+        <input id="promptId" type="hidden" />
+        <label>
+          タイトル
+          <input id="titleInput" required maxlength="80" placeholder="例：文章を読みやすくする" />
+        </label>
+        <label>
+          説明
+          <textarea id="descriptionInput" rows="2" maxlength="300" placeholder="このプロンプトの用途や使い方を入力してください"></textarea>
+        </label>
+        <label>
+          プロンプト
+          <textarea id="contentInput" required rows="7" placeholder="AIに入力するプロンプトを書いてください"></textarea>
+        </label>
+        <label>
+          タグ
+          <input id="tagsInput" maxlength="120" placeholder="文章, 仕事, アイデア（カンマ区切り）" />
+        </label>
+        <label class="favorite-check">
+          <input id="favoriteInput" type="checkbox" />
+          <span>お気に入りに追加</span>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" id="deleteButton" class="button danger hidden">削除</button>
+          <span class="spacer"></span>
+          <button type="button" id="cancelButton" class="button secondary">キャンセル</button>
+          <button type="submit" class="button primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="small-dialog">
+      <form id="confirmForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">CONFIRM</p>
+            <h2 id="confirmTitle">確認</h2>
+          </div>
+          <button type="button" id="closeConfirmDialog" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+        <p id="confirmMessage" class="confirm-message"></p>
+        <label class="favorite-check confirm-skip">
+          <input id="skipConfirmationInput" type="checkbox" />
+          <span id="skipConfirmationLabel">今後はこの確認を省略する</span>
+        </label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button type="button" id="cancelConfirmButton" class="button secondary">キャンセル</button>
+          <button type="submit" id="confirmProceedButton" class="button primary">実行</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmationSettingsDialog" class="small-dialog">
+      <form id="confirmationSettingsForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">SETTINGS</p>
+            <h2>確認設定</h2>
+          </div>
+          <button type="button" id="closeConfirmationSettings" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+        <p class="settings-description">確認画面を表示する操作を選んでください。</p>
+        <label class="settings-option">
+          <input id="showDeleteConfirmation" type="checkbox" />
+          <span>
+            <strong>プロンプトの削除</strong>
+            <small>削除前に確認する</small>
+          </span>
+        </label>
+        <label class="settings-option">
+          <input id="showRestoreConfirmation" type="checkbox" />
+          <span>
+            <strong>全件データのインポート</strong>
+            <small>現在の一覧を置き換える前に確認する</small>
+          </span>
+        </label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button type="submit" class="button primary">設定を保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

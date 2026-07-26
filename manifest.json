@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Prompt Memo",
+  "version": "1.0.0",
+  "description": "よく使うAIプロンプトを保存し、すぐに検索・コピー・貼り付けできます。",
+  "icons": {
+    "16": "icons/icon-v3-16.png",
+    "32": "icons/icon-v3-32.png",
+    "48": "icons/icon-v3-48.png",
+    "128": "icons/icon-v3-128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "action": {
+    "default_title": "Prompt Memo",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-v3-16.png",
+      "32": "icons/icon-v3-32.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Prompt Memoを開く"
+    }
+  }
+}

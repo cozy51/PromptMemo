@@ -9,6 +9,7 @@ const TITLE_COLLATOR = new Intl.Collator("ja", {
 const els = {
   addButton: document.querySelector("#addButton"),
   confirmationSettingsButton: document.querySelector("#confirmationSettingsButton"),
+  versionBadge: document.querySelector("#versionBadge"),
   emptyAddButton: document.querySelector("#emptyAddButton"),
   searchInput: document.querySelector("#searchInput"),
   filterBar: document.querySelector("#filterBar"),
@@ -74,8 +75,14 @@ async function init() {
     ...confirmationSettings,
     ...(result[CONFIRMATION_SETTINGS_KEY] || {})
   };
+  renderVersion();
   render();
   els.searchInput.focus();
+}
+
+function renderVersion() {
+  const version = chrome.runtime.getManifest().version;
+  els.versionBadge.textContent = `v${version}`;
 }
 
 function render() {

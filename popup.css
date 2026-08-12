@@ -251,6 +251,82 @@ footer {
   font-size: 11px;
 }
 
+.import-file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+.import-file span { flex: none; color: var(--muted); font-size: 10px; font-weight: 700; }
+.import-file strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+.import-compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.import-compare th, .import-compare td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+
+.import-compare thead th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.import-compare tbody th {
+  color: var(--muted);
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* The column being replaced reads as the primary figure of each row. */
+.import-compare td:last-child { font-weight: 700; }
+
+.import-warning {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e8d6b0;
+  border-radius: 9px;
+  color: #7a5a15;
+  background: #fffaf0;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.import-warning[data-level="danger"] {
+  border-color: #e8c6c6;
+  color: #8f3131;
+  background: #fff8f8;
+  font-weight: 700;
+}
+
+/* Specific enough to beat the neutral `.confirm-skip` background below: this
+   checkbox is the last thing between the user and an overwrite. */
+.confirm-skip.import-acknowledge {
+  border: 1px solid #e8c6c6;
+  color: #8f3131;
+  background: #fff8f8;
+  font-weight: 700;
+}
+
+.import-acknowledge input { accent-color: var(--danger); }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .cloud-sync-panel {
   display: grid;
   gap: 6px;

@@ -1,4 +1,5 @@
 const STORAGE_KEY = "promptMemoItems";
+const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
 const CONFIRMATION_SETTINGS_KEY = "promptMemoConfirmationSettings";
 const COLLAPSED_TAGS_KEY = "promptMemoCollapsedTags";
 const TITLE_COLLATOR = new Intl.Collator("ja", {
@@ -20,6 +21,25 @@ const els = {
   exportAllButton: document.querySelector("#exportAllButton"),
   importButton: document.querySelector("#importButton"),
   importFile: document.querySelector("#importFile"),
+  importDialog: document.querySelector("#importDialog"),
+  importForm: document.querySelector("#importForm"),
+  closeImportDialog: document.querySelector("#closeImportDialog"),
+  cancelImportButton: document.querySelector("#cancelImportButton"),
+  confirmImportButton: document.querySelector("#confirmImportButton"),
+  importFileName: document.querySelector("#importFileName"),
+  importCurrentUpdatedAt: document.querySelector("#importCurrentUpdatedAt"),
+  importFileUpdatedAt: document.querySelector("#importFileUpdatedAt"),
+  importCurrentPromptCount: document.querySelector("#importCurrentPromptCount"),
+  importFilePromptCount: document.querySelector("#importFilePromptCount"),
+  importCurrentFavoriteCount: document.querySelector("#importCurrentFavoriteCount"),
+  importFileFavoriteCount: document.querySelector("#importFileFavoriteCount"),
+  importCurrentTagCount: document.querySelector("#importCurrentTagCount"),
+  importFileTagCount: document.querySelector("#importFileTagCount"),
+  importWarning: document.querySelector("#importWarning"),
+  importAcknowledgeRow: document.querySelector("#importAcknowledgeRow"),
+  importAcknowledge: document.querySelector("#importAcknowledge"),
+  importSkipRow: document.querySelector("#importSkipRow"),
+  importSkipConfirmation: document.querySelector("#importSkipConfirmation"),
   dialog: document.querySelector("#editorDialog"),
   form: document.querySelector("#editorForm"),
   dialogTitle: document.querySelector("#dialogTitle"),
@@ -59,6 +79,7 @@ let confirmationSettings = {
 };
 let collapsedTags = new Set();
 let pendingConfirmation = null;
+let pendingImport = null;
 
 init();
 
@@ -264,7 +285,12 @@ function closeEditor() {
 }
 
 async function savePrompts() {
-  await chrome.storage.local.set({ [STORAGE_KEY]: prompts });
+  // Remember when the library last changed, so an import can tell whether the
+  // file it is about to apply predates what is already here.
+  await chrome.storage.local.set({
+    [STORAGE_KEY]: prompts,
+    [DATA_UPDATED_AT_KEY]: new Date().toISOString()
+  });
   render();
   // Cloud synchronisation is deliberately fire-and-forget: a network or
   // authentication failure must never turn a successful local save into an
@@ -474,49 +500,154 @@ els.importFile.addEventListener("change", async () => {
 
   try {
     const parsed = JSON.parse(await file.text());
+    els.importFile.value = "";
     const isSingle = parsed?.kind === "single-prompt" && parsed.prompt;
     const imported = isSingle
       ? [parsed.prompt]
       : (Array.isArray(parsed) ? parsed : parsed.prompts);
     if (!Array.isArray(imported)) throw new Error("invalid format");
 
-    const valid = imported.filter((item) =>
-      item && typeof item.title === "string" && typeof item.content === "string"
-    ).map((item) => ({
-      id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
-      title: item.title,
-      description: typeof item.description === "string" ? item.description : "",
-      content: item.content,
-      tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === "string") : [],
-      favorite: Boolean(item.favorite),
-      updatedAt: Number(item.updatedAt) || Date.now()
-    }));
-
-    if (!valid.length && imported.length) throw new Error("no valid prompts");
+    // Normalized the same way the cloud sync normalizes, so an imported file and
+    // a cloud document stay directly comparable.  Dates are taken as they are:
+    // stamping "now" on an undated file would make the oldest backup look like
+    // the newest data and silence the warning this check exists to raise.
+    const dataset = normalizePromptMemoDataset({ prompts: imported });
+    if (!dataset.prompts.length && imported.length) throw new Error("no valid prompts");
 
     if (isSingle) {
-      const restored = { ...valid[0], id: crypto.randomUUID(), updatedAt: Date.now() };
-      prompts.push(restored);
-    } else {
-      if (prompts.length) {
-        const approved = await askForConfirmation("fullRestore", {
-          title: "全件データをインポート",
-          message: `現在の${prompts.length}件を、インポートする${valid.length}件で置き換えます。よろしいですか？`,
-          skipLabel: "今後は全件インポート時の確認を省略する",
-          confirmLabel: "全件をインポート",
-          danger: false
-        });
-        if (!approved) return;
-      }
-      prompts = valid;
+      prompts.push({ ...dataset.prompts[0], id: crypto.randomUUID(), updatedAt: Date.now() });
+      await savePrompts();
+      showToast("個別プロンプトを1件インポートしました");
+      return;
     }
-    await savePrompts();
-    showToast(isSingle ? "個別プロンプトを1件インポートしました" : `全${valid.length}件をインポートしました`);
+
+    const current = normalizePromptMemoDataset({ prompts });
+    const assessment = assessPromptMemoImport({
+      fileExportedAt: parsed?.exportedAt,
+      fileDataset: dataset,
+      currentUpdatedAt: (await chrome.storage.local.get(DATA_UPDATED_AT_KEY))[DATA_UPDATED_AT_KEY],
+      currentDataset: current
+    });
+    // Nothing to overwrite, or a plainly newer file the user has already chosen
+    // to import without asking.
+    const safe = assessment.level === "none" && assessment.comparable;
+    if (!prompts.length || (safe && !confirmationSettings.fullRestore)) {
+      await applyImport(dataset);
+      return;
+    }
+    openImportDialog(file.name, dataset, current, assessment);
   } catch {
     showToast("このJSONファイルは読み込めません");
-  } finally {
     els.importFile.value = "";
   }
+});
+
+function formatImportDate(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "不明";
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"
+  }).format(date);
+}
+
+// The file's counts are what the user judges by, so each one carries how far it
+// moves from the current library rather than leaving the subtraction to them.
+function formatImportCount(count, current) {
+  const difference = count - current;
+  if (difference === 0) return `${count}件（増減なし）`;
+  return `${count}件（${difference > 0 ? "+" : "-"}${Math.abs(difference)}）`;
+}
+
+function openImportDialog(fileName, dataset, current, assessment) {
+  const fileCounts = readPromptMemoCounts(dataset);
+  const currentCounts = readPromptMemoCounts(current);
+  pendingImport = { dataset, assessment };
+
+  els.importFileName.textContent = fileName;
+  els.importCurrentUpdatedAt.textContent = formatImportDate(assessment.currentAt);
+  els.importFileUpdatedAt.textContent = formatImportDate(assessment.fileAt);
+  els.importCurrentPromptCount.textContent = `${currentCounts.prompts}件`;
+  els.importFilePromptCount.textContent = formatImportCount(fileCounts.prompts, currentCounts.prompts);
+  els.importCurrentFavoriteCount.textContent = `${currentCounts.favorites}件`;
+  els.importFileFavoriteCount.textContent = formatImportCount(fileCounts.favorites, currentCounts.favorites);
+  els.importCurrentTagCount.textContent = `${currentCounts.tags}件`;
+  els.importFileTagCount.textContent = formatImportCount(fileCounts.tags, currentCounts.tags);
+
+  applyImportWarning(assessment);
+  els.importDialog.showModal();
+}
+
+// Importing is the one action that can walk the library backwards on purpose,
+// so an older file has to be acknowledged before it can be applied.
+function applyImportWarning(assessment) {
+  const stale = assessment.level === "danger";
+  els.importAcknowledge.checked = false;
+  els.importAcknowledgeRow.classList.toggle("hidden", !stale);
+  // Skipping the confirmation is only ever offered for an import that is plainly
+  // safe; a stale or shrinking file always asks, whatever the setting says.
+  els.importSkipRow.classList.toggle("hidden", assessment.level !== "none" || !assessment.comparable);
+  els.importSkipConfirmation.checked = false;
+  els.confirmImportButton.disabled = stale;
+  els.confirmImportButton.className = stale ? "button danger solid" : "button primary";
+  els.confirmImportButton.textContent = stale ? "古い内容で上書きする" : "全件をインポート";
+
+  // Age and size are separate facts, and a file can carry both: say each of them
+  // that applies rather than letting the loudest one hide the rest.
+  const notes = [];
+  if (stale) {
+    notes.push(
+      `このファイルは、現在のデータより${formatPromptMemoElapsed(assessment.staleMs)}古い内容です。`
+      + "インポートすると、その間の変更は失われます。"
+      + (assessment.shrink ? `件数も${assessment.shrink.removed}件減ります。` : "")
+    );
+  } else if (assessment.level === "caution") {
+    notes.push(assessment.shrink.reason === "empty"
+      ? "このファイルにはプロンプトが1件もありません。インポートすると現在の内容がすべて消えます。"
+      : `このファイルは現在より${assessment.shrink.removed}件少ない内容です。`);
+  }
+  if (!assessment.comparable) {
+    notes.push("日時を読み取れないため、どちらが新しいかは判断できません。件数を確認してください。");
+  }
+  els.importWarning.textContent = notes.join("");
+  els.importWarning.dataset.level = stale ? "danger" : "caution";
+  els.importWarning.classList.toggle("hidden", notes.length === 0);
+}
+
+async function applyImport(dataset) {
+  prompts = dataset.prompts;
+  await savePrompts();
+  showToast(`全${prompts.length}件をインポートしました`);
+}
+
+function closeImportDialog() {
+  pendingImport = null;
+  els.importDialog.close();
+}
+
+els.closeImportDialog.addEventListener("click", closeImportDialog);
+els.cancelImportButton.addEventListener("click", closeImportDialog);
+els.importDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeImportDialog();
+});
+els.importAcknowledge.addEventListener("change", () => {
+  els.confirmImportButton.disabled = !els.importAcknowledge.checked;
+});
+
+els.importForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingImport) return;
+  const { dataset, assessment } = pendingImport;
+  if (assessment.level === "danger" && !els.importAcknowledge.checked) {
+    showToast("古い内容で上書きすることを確認してください");
+    return;
+  }
+  if (!els.importSkipRow.classList.contains("hidden") && els.importSkipConfirmation.checked) {
+    confirmationSettings.fullRestore = false;
+    await saveConfirmationSettings();
+  }
+  closeImportDialog();
+  await applyImport(dataset);
 });
 
 els.filterBar.addEventListener("click", (event) => {

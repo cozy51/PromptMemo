@@ -11,6 +11,8 @@ const {
   validatePromptMemoBackup,
   decidePromptMemoSyncAction,
   assessPromptMemoShrink,
+  assessPromptMemoImport,
+  getPromptMemoActivityAt,
   createPromptMemoHistoryName,
   parsePromptMemoHistoryName,
   selectExpiredPromptMemoHistory,
@@ -141,6 +143,100 @@ check(
   null,
   "A tiny library can shrink freely: half of it is one prompt"
 );
+
+// --- assessPromptMemoImport ------------------------------------------------
+// Importing a file by hand is the one action that can walk the library
+// backwards on purpose, so it is judged on age, not only on size.
+
+const NOW = Date.parse("2026-08-12T12:00:00Z");
+const HOUR = 60 * 60 * 1000;
+
+function dated(id, at) {
+  return prompt(id, { updatedAt: at });
+}
+
+function library(count, at) {
+  return { prompts: Array.from({ length: count }, (_, index) => dated(`p${index}`, at)) };
+}
+
+const currentLibrary = library(20, NOW);
+
+check(
+  assessPromptMemoImport({
+    fileExportedAt: new Date(NOW + HOUR).toISOString(),
+    fileDataset: library(21, NOW + HOUR),
+    currentUpdatedAt: new Date(NOW).toISOString(),
+    currentDataset: currentLibrary
+  }).level,
+  "none",
+  "A newer file is an ordinary import"
+);
+
+const stale = assessPromptMemoImport({
+  fileExportedAt: new Date(NOW - 2 * HOUR).toISOString(),
+  fileDataset: library(20, NOW - 2 * HOUR),
+  currentUpdatedAt: new Date(NOW).toISOString(),
+  currentDataset: currentLibrary
+});
+check(stale.level, "danger", "A file older than the current data is a step backwards");
+check(stale.staleMs, 2 * HOUR, "…and says by how much");
+check(stale.comparable, true, "…having been able to compare the two dates");
+
+check(
+  assessPromptMemoImport({
+    fileExportedAt: new Date(NOW - 30 * 1000).toISOString(),
+    fileDataset: library(20, NOW - 30 * 1000),
+    currentUpdatedAt: new Date(NOW).toISOString(),
+    currentDataset: currentLibrary
+  }).level,
+  "none",
+  "Clock drift between PCs is not treated as a step backwards"
+);
+
+const shrinking = assessPromptMemoImport({
+  fileExportedAt: new Date(NOW + HOUR).toISOString(),
+  fileDataset: library(3, NOW + HOUR),
+  currentUpdatedAt: new Date(NOW).toISOString(),
+  currentDataset: currentLibrary
+});
+check(shrinking.level, "caution", "A newer but much smaller file still warns");
+check(shrinking.shrink.removed, 17, "…with the number of prompts it drops");
+
+check(
+  assessPromptMemoImport({
+    fileExportedAt: new Date(NOW + HOUR).toISOString(),
+    fileDataset: { prompts: [] },
+    currentUpdatedAt: new Date(NOW).toISOString(),
+    currentDataset: currentLibrary
+  }).shrink.reason,
+  "empty",
+  "An empty file is called out as emptying the library"
+);
+
+const undated = assessPromptMemoImport({
+  fileDataset: { prompts: [{ id: "a", title: "題名", content: "本文" }] },
+  currentUpdatedAt: "",
+  currentDataset: { prompts: [] }
+});
+check(undated.comparable, false, "A file with no dates anywhere cannot be compared");
+check(undated.level, "none", "…and is not accused of being old");
+
+check(
+  assessPromptMemoImport({
+    // No export date, but the records themselves are dated.
+    fileDataset: library(20, NOW - 3 * HOUR),
+    currentUpdatedAt: "",
+    currentDataset: currentLibrary
+  }).level,
+  "danger",
+  "A file without an export date is dated from its records"
+);
+check(
+  getPromptMemoActivityAt({ prompts: [dated("a", NOW), dated("b", NOW - HOUR)] }),
+  new Date(NOW).toISOString(),
+  "A library is dated by its newest record"
+);
+check(getPromptMemoActivityAt({ prompts: [prompt("a", { updatedAt: 0 })] }), "", "An undated record dates nothing");
 
 // --- normalizePromptMemoDataset / fingerprints -----------------------------
 

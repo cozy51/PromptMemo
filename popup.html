@@ -130,6 +130,73 @@
       </form>
     </dialog>
 
+    <dialog id="importDialog" class="small-dialog">
+      <form id="importForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">IMPORT</p>
+            <h2>インポート内容を確認</h2>
+          </div>
+          <button type="button" id="closeImportDialog" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+
+        <p class="import-file">
+          <span>ファイル</span>
+          <strong id="importFileName"></strong>
+        </p>
+
+        <table class="import-compare">
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">項目</span></th>
+              <th scope="col">現在</th>
+              <th scope="col">ファイル</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">最終更新</th>
+              <td id="importCurrentUpdatedAt"></td>
+              <td id="importFileUpdatedAt"></td>
+            </tr>
+            <tr>
+              <th scope="row">プロンプト</th>
+              <td id="importCurrentPromptCount"></td>
+              <td id="importFilePromptCount"></td>
+            </tr>
+            <tr>
+              <th scope="row">お気に入り</th>
+              <td id="importCurrentFavoriteCount"></td>
+              <td id="importFileFavoriteCount"></td>
+            </tr>
+            <tr>
+              <th scope="row">タグ</th>
+              <td id="importCurrentTagCount"></td>
+              <td id="importFileTagCount"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p id="importWarning" class="import-warning hidden" role="alert"></p>
+        <p class="confirm-message">現在のプロンプトは、ファイルの内容に置き換わります。続けますか？</p>
+
+        <label id="importAcknowledgeRow" class="favorite-check confirm-skip import-acknowledge hidden">
+          <input id="importAcknowledge" type="checkbox" />
+          <span>古い内容で上書きし、それ以降の変更が失われることを確認しました</span>
+        </label>
+        <label id="importSkipRow" class="favorite-check confirm-skip">
+          <input id="importSkipConfirmation" type="checkbox" />
+          <span>今後は全件インポート時の確認を省略する</span>
+        </label>
+
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button type="button" id="cancelImportButton" class="button secondary">キャンセル</button>
+          <button type="submit" id="confirmImportButton" class="button primary">全件をインポート</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="confirmationSettingsDialog" class="small-dialog">
       <form id="confirmationSettingsForm">
         <div class="dialog-head">
@@ -151,7 +218,7 @@
           <input id="showRestoreConfirmation" type="checkbox" />
           <span>
             <strong>全件データのインポート</strong>
-            <small>現在の一覧を置き換える前に確認する</small>
+            <small>現在の一覧を置き換える前に確認する（古いファイルのときは必ず確認します）</small>
           </span>
         </label>
         <div class="dialog-actions">

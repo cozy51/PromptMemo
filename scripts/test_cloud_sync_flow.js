@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { createDocument, settle } = require("./fake_popup.js");
 
 const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "popup.html"), "utf8");
@@ -88,73 +89,6 @@ function createCloud() {
   };
 }
 
-// --- fake popup ------------------------------------------------------------
-
-function createElement(tag = "div") {
-  const classes = new Set();
-  return {
-    tagName: tag,
-    children: [],
-    handlers: {},
-    dataset: {},
-    textContent: "",
-    value: "",
-    hidden: false,
-    disabled: false,
-    open: false,
-    set className(value) {
-      classes.clear();
-      String(value).split(/\s+/).filter(Boolean).forEach((name) => classes.add(name));
-    },
-    get className() { return [...classes].join(" "); },
-    classList: {
-      add: (name) => classes.add(name),
-      remove: (name) => classes.delete(name),
-      contains: (name) => classes.has(name),
-      toggle: (name, force) => (force ?? !classes.has(name)) ? classes.add(name) : classes.delete(name)
-    },
-    append(...nodes) { this.children.push(...nodes); },
-    replaceChildren(...nodes) { this.children = nodes; },
-    querySelector(selector) {
-      const name = selector.replace(/^\./, "");
-      for (const child of this.children) {
-        if (child.classList?.contains(name)) return child;
-        const found = child.querySelector?.(selector);
-        if (found) return found;
-      }
-      return null;
-    },
-    addEventListener(type, handler) { (this.handlers[type] ||= []).push(handler); },
-    dispatch(type, event = {}) {
-      (this.handlers[type] || []).forEach((handler) => handler({ preventDefault() {}, ...event }));
-    },
-    showModal() { this.open = true; },
-    close() { this.open = false; this.dispatch("close"); },
-    focus() {}
-  };
-}
-
-function createDocument() {
-  // Every id the page declares, so the engine's `querySelector` calls resolve
-  // exactly as far as the real popup lets them.
-  const ids = [...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
-  const elements = new Map(ids.map((id) => [id, createElement()]));
-  return {
-    elements,
-    visibilityState: "visible",
-    addEventListener() {},
-    createElement: (tag) => createElement(tag),
-    querySelector(selector) {
-      if (!selector.startsWith("#")) return null;
-      const id = selector.slice(1);
-      if (!elements.has(id)) {
-        throw new Error(`popup.html has no element with id "${id}"`);
-      }
-      return elements.get(id);
-    }
-  };
-}
-
 // --- a PC running the extension -------------------------------------------
 
 function createDevice(cloud, { prompts = [], config = null, session = null } = {}) {
@@ -163,7 +97,7 @@ function createDevice(cloud, { prompts = [], config = null, session = null } = {
     ...(config ? { promptMemoCloudConfig: config } : {}),
     ...(session ? { promptMemoCloudSession: session } : {})
   };
-  const doc = createDocument();
+  const doc = createDocument(html);
   const timers = new Set();
 
   const chrome = {
@@ -221,12 +155,6 @@ function createDevice(cloud, { prompts = [], config = null, session = null } = {
   };
 }
 
-// Let every queued promise chain in the engine run to completion.
-async function settle(rounds = 60) {
-  for (let index = 0; index < rounds; index += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
 
 // --- the scenario ----------------------------------------------------------
 

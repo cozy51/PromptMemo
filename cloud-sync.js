@@ -6,6 +6,7 @@
 // archived to the cloud history first so nothing is lost either way.
 (function setupCloudSync() {
   const DATA_KEY = "promptMemoItems";
+  const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
   const CONFIG_KEY = "promptMemoCloudConfig";
   const SESSION_KEY = "promptMemoCloudSession";
   const SYNC_STATE_KEY = "promptMemoSyncState";
@@ -182,11 +183,16 @@
     return normalizePromptMemoDataset({ prompts: result[DATA_KEY] });
   }
 
-  async function saveLocalDataset(dataset) {
+  async function saveLocalDataset(dataset, updatedAt) {
     // Written straight to storage: the popup redraws from the storage change
     // event, and `notifyLocalChange` is deliberately not called, because a copy
-    // that came *from* the cloud must not be pushed back to it.
-    await chrome.storage.local.set({ [DATA_KEY]: dataset.prompts });
+    // that came *from* the cloud must not be pushed back to it.  The stamp is
+    // the moment the cloud copy was written, not now, so a later import is
+    // compared against when the data actually changed.
+    await chrome.storage.local.set({
+      [DATA_KEY]: dataset.prompts,
+      [DATA_UPDATED_AT_KEY]: updatedAt || new Date().toISOString()
+    });
   }
 
   function objectPath(...parts) {
@@ -304,7 +310,7 @@
   }
 
   async function applyRemote(remote) {
-    await saveLocalDataset(remote.dataset);
+    await saveLocalDataset(remote.dataset, remote.updatedAt);
     // Re-read so the recorded fingerprint describes what is actually stored,
     // including any normalisation the load path applies.
     const stored = await loadLocalDataset();

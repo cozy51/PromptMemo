@@ -206,6 +206,53 @@ function decidePromptMemoSyncAction(input) {
   return localDirty ? "push" : "pull";
 }
 
+// Clocks between devices drift, so a file has to look meaningfully older than
+// the current data before the import is treated as a step backwards.
+const PROMPT_MEMO_STALE_IMPORT_TOLERANCE_MS = 60 * 1000;
+
+// The newest timestamp anywhere in a library.  A file written by hand — and one
+// exported before the app recorded an export date — can still be dated from the
+// records themselves.
+function getPromptMemoActivityAt(dataset) {
+  let newest = 0;
+  (dataset?.prompts || []).forEach((prompt) => {
+    const time = new Date(prompt?.updatedAt ?? NaN).getTime();
+    if (Number.isFinite(time) && time > newest) newest = time;
+  });
+  return newest ? new Date(newest).toISOString() : "";
+}
+
+function pickNewestPromptMemoTimestamp(...values) {
+  let newest = 0;
+  values.forEach((value) => {
+    const time = new Date(value ?? NaN).getTime();
+    if (Number.isFinite(time) && time > newest) newest = time;
+  });
+  return newest ? new Date(newest).toISOString() : "";
+}
+
+// Importing a file is the one action that can walk the library backwards on
+// purpose, so it is judged on age rather than size alone: a file exported before
+// the current data was last changed would silently discard everything since.
+function assessPromptMemoImport({
+  fileExportedAt, fileDataset, currentUpdatedAt, currentDataset
+} = {}) {
+  const fileAt = pickNewestPromptMemoTimestamp(fileExportedAt, getPromptMemoActivityAt(fileDataset));
+  const currentAt = pickNewestPromptMemoTimestamp(
+    currentUpdatedAt, getPromptMemoActivityAt(currentDataset)
+  );
+  const shrink = assessPromptMemoShrink(currentDataset, fileDataset);
+  const fileTime = Date.parse(fileAt);
+  const currentTime = Date.parse(currentAt);
+  const comparable = Number.isFinite(fileTime) && Number.isFinite(currentTime);
+  const staleMs = comparable ? currentTime - fileTime : 0;
+
+  const level = comparable && staleMs > PROMPT_MEMO_STALE_IMPORT_TOLERANCE_MS ? "danger"
+    : shrink ? "caution"
+    : "none";
+  return { level, staleMs, fileAt, currentAt, shrink, comparable };
+}
+
 // Guard against the accidental wipe: a cleared browser profile, a mis-clicked
 // bulk delete, or an import of a much older file must not quietly shrink the
 // authoritative copy.
@@ -345,6 +392,9 @@ if (typeof module === "object" && module.exports) {
     validatePromptMemoBackup,
     decidePromptMemoSyncAction,
     assessPromptMemoShrink,
+    assessPromptMemoImport,
+    getPromptMemoActivityAt,
+    pickNewestPromptMemoTimestamp,
     createPromptMemoHistoryName,
     parsePromptMemoHistoryName,
     selectExpiredPromptMemoHistory,

@@ -43,6 +43,20 @@
       </section>
 
       <footer>
+        <div class="cloud-sync-panel" aria-label="クラウド同期">
+          <div class="cloud-sync-texts">
+            <span id="cloudSyncStatus" class="cloud-sync-status" aria-live="polite">クラウド同期を確認中…</span>
+            <span id="cloudSyncDetail" class="cloud-sync-detail" hidden></span>
+          </div>
+          <div class="cloud-sync-actions">
+            <button id="cloudSyncResolve" class="button danger compact" type="button" hidden>同期の確認</button>
+            <button id="cloudSyncNow" class="button secondary compact" type="button" hidden>今すぐ同期</button>
+            <button id="cloudSyncHistory" class="button secondary compact" type="button" hidden>クラウド履歴</button>
+            <button id="cloudSyncSignIn" class="button secondary compact" type="button" hidden>ログイン</button>
+            <button id="cloudSyncSignOut" class="button secondary compact" type="button" hidden>ログアウト</button>
+            <button id="cloudSyncSettings" class="button secondary compact" type="button">クラウド設定</button>
+          </div>
+        </div>
         <div class="backup-info">
           <strong>データ管理</strong>
         </div>
@@ -104,7 +118,7 @@
           <button type="button" id="closeConfirmDialog" class="icon-button" aria-label="閉じる">×</button>
         </div>
         <p id="confirmMessage" class="confirm-message"></p>
-        <label class="favorite-check confirm-skip">
+        <label id="skipConfirmationRow" class="favorite-check confirm-skip">
           <input id="skipConfirmationInput" type="checkbox" />
           <span id="skipConfirmationLabel">今後はこの確認を省略する</span>
         </label>
@@ -147,7 +161,114 @@
       </form>
     </dialog>
 
+    <dialog id="cloudSettingsDialog" class="small-dialog">
+      <form id="cloudSettingsForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">CLOUD</p>
+            <h2>クラウド設定</h2>
+          </div>
+          <button type="button" id="closeCloudSettings" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+        <p class="settings-description">
+          Supabaseのプロジェクト情報を登録すると、プロンプトをクラウドに保存し、上書き前の内容を履歴として残せます。
+        </p>
+        <label>
+          プロジェクトURL
+          <input id="cloudUrlInput" type="url" placeholder="https://xxxxxxxx.supabase.co" />
+        </label>
+        <label>
+          anonキー
+          <input id="cloudKeyInput" type="password" placeholder="eyJhbGciOi..." />
+        </label>
+        <label>
+          バケット名
+          <input id="cloudBucketInput" placeholder="todo-backups" />
+        </label>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button type="submit" class="button primary">設定を保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudSignInDialog" class="small-dialog">
+      <form id="cloudSignInForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">CLOUD</p>
+            <h2>クラウドにログイン</h2>
+          </div>
+          <button type="button" id="closeCloudSignIn" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+        <p class="settings-description">Supabaseに登録したメールアドレスとパスワードを入力してください。</p>
+        <label>
+          メールアドレス
+          <input id="cloudEmailInput" type="email" autocomplete="username" required />
+        </label>
+        <label>
+          パスワード
+          <input id="cloudPasswordInput" type="password" autocomplete="current-password" required />
+        </label>
+        <p id="cloudSignInMessage" class="cloud-sign-in-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <span class="spacer"></span>
+          <button type="submit" id="cloudSignInSubmit" class="button primary">ログイン</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="cloudHistoryDialog">
+      <div class="cloud-dialog-body">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">CLOUD</p>
+            <h2>クラウド履歴から戻す</h2>
+          </div>
+          <button type="button" id="closeCloudHistory" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+        <p class="cloud-note">
+          クラウドが上書きされるたびに、上書き前の内容を1件ずつ保管します。直近30件はすべて残し、それより古いものは1日1件で最大30日分を残します。戻す操作も新しい版として記録するため、他のPCにも安全に反映されます。
+        </p>
+        <ul id="cloudHistoryList" class="cloud-history-list"></ul>
+        <p id="cloudHistoryEmpty" class="cloud-note">まだ履歴はありません</p>
+      </div>
+    </dialog>
+
+    <dialog id="cloudConflictDialog">
+      <div class="cloud-dialog-body">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">CLOUD</p>
+            <h2>どちらの内容を残しますか？</h2>
+          </div>
+        </div>
+        <p id="cloudConflictReason" class="cloud-warning"></p>
+        <div class="cloud-conflict-choices">
+          <div class="cloud-conflict-choice">
+            <span class="cloud-conflict-label">クラウド（他のPCを含む最新）</span>
+            <strong id="cloudConflictRemoteSummary"></strong>
+          </div>
+          <div class="cloud-conflict-choice">
+            <span class="cloud-conflict-label">このPC（未同期の内容）</span>
+            <strong id="cloudConflictLocalSummary"></strong>
+          </div>
+        </div>
+        <p class="cloud-note">
+          選ばなかった内容はクラウド履歴へ退避するため、あとから「クラウド履歴」で元に戻せます。
+        </p>
+        <div class="dialog-actions cloud-conflict-actions">
+          <button type="button" id="cloudConflictLater" class="button secondary compact">あとで決める</button>
+          <button type="button" id="cloudConflictUseLocal" class="button secondary compact">このPCの内容を残す</button>
+          <button type="button" id="cloudConflictUseRemote" class="button primary compact">クラウドの内容を残す</button>
+        </div>
+      </div>
+    </dialog>
+
     <div id="toast" role="status" aria-live="polite"></div>
+    <script src="sync-core.js"></script>
+    <script src="supabase-client.js"></script>
     <script src="popup.js"></script>
+    <script src="cloud-sync.js"></script>
   </body>
 </html>

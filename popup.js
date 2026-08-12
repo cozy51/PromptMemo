@@ -36,6 +36,7 @@ const els = {
   confirmForm: document.querySelector("#confirmForm"),
   confirmTitle: document.querySelector("#confirmTitle"),
   confirmMessage: document.querySelector("#confirmMessage"),
+  skipConfirmationRow: document.querySelector("#skipConfirmationRow"),
   skipConfirmationInput: document.querySelector("#skipConfirmationInput"),
   skipConfirmationLabel: document.querySelector("#skipConfirmationLabel"),
   confirmProceedButton: document.querySelector("#confirmProceedButton"),
@@ -265,6 +266,10 @@ function closeEditor() {
 async function savePrompts() {
   await chrome.storage.local.set({ [STORAGE_KEY]: prompts });
   render();
+  // Cloud synchronisation is deliberately fire-and-forget: a network or
+  // authentication failure must never turn a successful local save into an
+  // error the user has to deal with.
+  window.promptMemoCloudSync?.notifyLocalChange();
 }
 
 async function backupToFile() {
@@ -390,12 +395,16 @@ async function saveConfirmationSettings() {
   await chrome.storage.local.set({ [CONFIRMATION_SETTINGS_KEY]: confirmationSettings });
 }
 
+// `type` names the confirmation setting that can switch this dialog off.  Cloud
+// operations pass none: restoring an old version is rare and irreversible
+// enough that it always asks, so it has no "skip" checkbox either.
 function askForConfirmation(type, options) {
-  if (!confirmationSettings[type]) return Promise.resolve(true);
+  if (type && !confirmationSettings[type]) return Promise.resolve(true);
 
   els.confirmTitle.textContent = options.title;
   els.confirmMessage.textContent = options.message;
-  els.skipConfirmationLabel.textContent = options.skipLabel;
+  els.skipConfirmationRow.classList.toggle("hidden", !type);
+  els.skipConfirmationLabel.textContent = options.skipLabel || "";
   els.skipConfirmationInput.checked = false;
   els.confirmProceedButton.textContent = options.confirmLabel;
   els.confirmProceedButton.className = options.danger ? "button danger solid" : "button primary";
@@ -437,7 +446,7 @@ els.confirmDialog.addEventListener("cancel", (event) => {
 els.confirmForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!pendingConfirmation) return;
-  if (els.skipConfirmationInput.checked) {
+  if (pendingConfirmation.type && els.skipConfirmationInput.checked) {
     confirmationSettings[pendingConfirmation.type] = false;
     await saveConfirmationSettings();
   }
@@ -582,3 +591,22 @@ els.deleteButton.addEventListener("click", async () => {
   closeEditor();
   showToast("削除しました");
 });
+
+// The cloud sync engine writes a newer copy straight to storage, so the list is
+// redrawn from there instead of letting it reach into this file's state.
+chrome.storage.onChanged.addListener((changes, area) => {
+  const change = area === "local" ? changes[STORAGE_KEY] : null;
+  if (!change || !Array.isArray(change.newValue)) return;
+  // This fires for our own saves too, and redrawing then would fight with an
+  // open editor for focus.
+  if (JSON.stringify(change.newValue) === JSON.stringify(prompts)) return;
+  prompts = change.newValue;
+  render();
+});
+
+// Shared with cloud-sync.js so its dialogs reuse this popup's confirmation and
+// toast instead of the browser's blocking ones.
+window.promptMemoUI = {
+  confirm: (options) => askForConfirmation(null, options),
+  toast: showToast
+};

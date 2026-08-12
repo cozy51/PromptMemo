@@ -251,6 +251,131 @@ footer {
   font-size: 11px;
 }
 
+.cloud-sync-panel {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cloud-sync-texts {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cloud-sync-status {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-sync-status[data-state="saved"] { color: #24734b; }
+.cloud-sync-status[data-state="saving"] { color: var(--muted); }
+.cloud-sync-status[data-state="error"] { color: var(--danger); }
+
+.cloud-sync-detail {
+  flex: none;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.cloud-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cloud-sync-actions .button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.cloud-sign-in-message {
+  margin-top: 12px;
+  min-height: 16px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.cloud-sign-in-message[data-state="error"] { color: var(--danger); }
+
+.cloud-dialog-body { padding: 20px; }
+.cloud-note { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.cloud-warning {
+  padding: 10px 12px;
+  border: 1px solid #e8c6c6;
+  border-radius: 9px;
+  color: #8f3131;
+  background: #fff8f8;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.cloud-conflict-choices { display: grid; gap: 8px; margin: 12px 0; }
+
+.cloud-conflict-choice {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.cloud-conflict-label { color: var(--muted); font-size: 10px; font-weight: 700; }
+.cloud-conflict-choice strong { font-size: 11px; line-height: 1.5; }
+.cloud-conflict-actions { flex-wrap: wrap; }
+
+.cloud-history-list {
+  display: grid;
+  gap: 7px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 12px 0 0;
+  padding: 1px;
+  list-style: none;
+}
+
+.cloud-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.cloud-history-current { border-style: dashed; background: var(--canvas); }
+
+.cloud-history-item > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cloud-history-item strong { font-size: 11px; }
+.cloud-history-item span { color: var(--muted); font-size: 10px; }
+
+/* Specific enough to beat the muted `.cloud-history-item span` above: the
+   counts are the figure the user compares, so they read as primary text. */
+.cloud-history-item .cloud-history-counts {
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cloud-history-item .button { flex: none; }
+
 dialog {
   width: calc(100% - 28px);
   max-width: 382px;
@@ -274,6 +399,8 @@ label input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0
 .dialog-actions { display: flex; gap: 8px; margin-top: 20px; }
 .spacer { flex: 1; }
 .confirm-message, .settings-description { color: var(--muted); font-size: 12px; line-height: 1.65; }
+/* Cloud confirmations describe several facts, one per line. */
+.confirm-message { white-space: pre-line; }
 .confirm-skip { margin-top: 16px; padding: 11px; border-radius: 9px; background: var(--canvas); }
 .settings-description { margin-bottom: 12px; }
 .settings-option {

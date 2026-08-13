@@ -29,6 +29,9 @@ body {
 
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
+/* An unavailable button has to look unavailable before it is clicked: the
+   pointer refuses it and the colour fades, so nobody aims at a dead target. */
+button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 header {
   flex: none;
@@ -196,14 +199,14 @@ nav { display: flex; gap: 7px; padding: 12px 0; }
 
 .button { padding: 8px 12px; border: 1px solid transparent; border-radius: 9px; font-size: 12px; font-weight: 700; }
 .button.primary { color: white; border-color: var(--accent); background: var(--accent); }
-.button.primary:hover, .icon-button.primary:hover { background: var(--accent-hover); }
+.button.primary:hover:not(:disabled), .icon-button.primary:hover:not(:disabled) { background: var(--accent-hover); }
 .button.secondary { color: var(--ink); border-color: var(--line); background: var(--surface); }
 .button.copy-action { color: white; border-color: var(--copy); background: var(--copy); }
-.button.copy-action:hover { background: var(--copy-hover); }
+.button.copy-action:hover:not(:disabled) { background: var(--copy-hover); }
 .button.insert { flex: 1; }
 .button.danger { color: var(--danger); border-color: #e8c6c6; background: #fff8f8; }
 .button.danger.solid { color: white; border-color: var(--danger); background: var(--danger); }
-.button.danger.solid:hover { background: #942e2e; }
+.button.danger.solid:hover:not(:disabled) { background: #942e2e; }
 
 .empty { flex: 1; padding: 64px 24px; text-align: center; }
 .empty-icon { margin-bottom: 10px; color: var(--accent); font-size: 34px; }

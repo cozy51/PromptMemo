@@ -2,6 +2,12 @@ const STORAGE_KEY = "promptMemoItems";
 const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
 const CONFIRMATION_SETTINGS_KEY = "promptMemoConfirmationSettings";
 const COLLAPSED_TAGS_KEY = "promptMemoCollapsedTags";
+// When each prompt was last pasted or copied on this PC.  It is kept apart from
+// the prompts themselves on purpose: a stamp on the record would make every copy
+// an edit, and each one would be pushed to the cloud and fill its history.
+const USAGE_KEY = "promptMemoUsage";
+const HISTORY_LIMIT = 30;
+const SHORT_TITLE_LENGTH = 80;
 const TITLE_COLLATOR = new Intl.Collator("ja", {
   sensitivity: "base",
   numeric: true
@@ -9,6 +15,7 @@ const TITLE_COLLATOR = new Intl.Collator("ja", {
 
 const els = {
   addButton: document.querySelector("#addButton"),
+  addShortButton: document.querySelector("#addShortButton"),
   confirmationSettingsButton: document.querySelector("#confirmationSettingsButton"),
   versionBadge: document.querySelector("#versionBadge"),
   emptyAddButton: document.querySelector("#emptyAddButton"),
@@ -49,6 +56,15 @@ const els = {
   contentInput: document.querySelector("#contentInput"),
   tagsInput: document.querySelector("#tagsInput"),
   favoriteInput: document.querySelector("#favoriteInput"),
+  shortDialog: document.querySelector("#shortDialog"),
+  shortForm: document.querySelector("#shortForm"),
+  shortDialogTitle: document.querySelector("#shortDialogTitle"),
+  shortId: document.querySelector("#shortId"),
+  shortInput: document.querySelector("#shortInput"),
+  shortFavoriteInput: document.querySelector("#shortFavoriteInput"),
+  deleteShortButton: document.querySelector("#deleteShortButton"),
+  closeShortDialog: document.querySelector("#closeShortDialog"),
+  cancelShortButton: document.querySelector("#cancelShortButton"),
   deleteButton: document.querySelector("#deleteButton"),
   closeDialog: document.querySelector("#closeDialog"),
   cancelButton: document.querySelector("#cancelButton"),
@@ -71,13 +87,14 @@ const els = {
 };
 
 let prompts = [];
-let currentFilter = "favorite";
+let currentFilter = "history";
 let toastTimer;
 let confirmationSettings = {
   delete: true,
   fullRestore: true
 };
 let collapsedTags = new Set();
+let usage = {};
 let pendingConfirmation = null;
 let pendingImport = null;
 
@@ -87,12 +104,14 @@ async function init() {
   const result = await chrome.storage.local.get([
     STORAGE_KEY,
     CONFIRMATION_SETTINGS_KEY,
-    COLLAPSED_TAGS_KEY
+    COLLAPSED_TAGS_KEY,
+    USAGE_KEY
   ]);
   prompts = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
   collapsedTags = new Set(
     Array.isArray(result[COLLAPSED_TAGS_KEY]) ? result[COLLAPSED_TAGS_KEY] : []
   );
+  usage = result[USAGE_KEY] && typeof result[USAGE_KEY] === "object" ? result[USAGE_KEY] : {};
   confirmationSettings = {
     ...confirmationSettings,
     ...(result[CONFIRMATION_SETTINGS_KEY] || {})
@@ -109,20 +128,29 @@ function renderVersion() {
 
 function render() {
   const query = els.searchInput.value.trim().toLocaleLowerCase("ja");
-  const visible = prompts
+  const matching = prompts
     .filter((prompt) => {
       const searchable = [prompt.title, prompt.description, prompt.content, ...(prompt.tags || [])].join(" ").toLocaleLowerCase("ja");
       return !query || searchable.includes(query);
-    })
-    .filter((prompt) => {
-      if (currentFilter === "favorite") return prompt.favorite;
-      if (currentFilter === "other") return !prompt.favorite;
-      return true;
-    })
-    .sort((a, b) =>
-      TITLE_COLLATOR.compare(a.title, b.title) ||
-      b.updatedAt - a.updatedAt
-    );
+    });
+  // The history is the most recently used first, so the one used a moment ago is
+  // always at the top; every other view stays in title order.
+  const visible = currentFilter === "history"
+    ? matching
+      .filter((prompt) => usage[prompt.id])
+      .sort((a, b) => usage[b.id] - usage[a.id])
+      .slice(0, HISTORY_LIMIT)
+    : matching
+      .filter((prompt) => {
+        if (currentFilter === "favorite") return prompt.favorite;
+        if (currentFilter === "other") return !prompt.favorite;
+        if (currentFilter === "short") return isShort(prompt);
+        return true;
+      })
+      .sort((a, b) =>
+        TITLE_COLLATOR.compare(a.title, b.title) ||
+        b.updatedAt - a.updatedAt
+      );
 
   const listItems = currentFilter === "tags"
     ? createTagGroups(visible)
@@ -133,7 +161,13 @@ function render() {
   els.emptyState.classList.toggle("hidden", !isEmpty);
   els.emptyAddButton.classList.toggle("hidden", prompts.length > 0);
 
-  if (prompts.length && isEmpty) {
+  if (prompts.length && isEmpty && currentFilter === "history" && !query) {
+    els.emptyTitle.textContent = "まだ使用履歴がありません";
+    els.emptyText.textContent = "貼り付け・コピーしたプロンプトが、新しい順にここへ並びます。";
+  } else if (prompts.length && isEmpty && currentFilter === "short" && !query) {
+    els.emptyTitle.textContent = "短文がありません";
+    els.emptyText.textContent = "「＋短文」から、1行の指示を本文だけで登録できます。";
+  } else if (prompts.length && isEmpty) {
     els.emptyTitle.textContent = "見つかりませんでした";
     els.emptyText.textContent = "検索語や絞り込みを変えてみてください。";
   } else {
@@ -202,9 +236,13 @@ function createTagGroups(items) {
     });
 }
 
+function isShort(prompt) {
+  return prompt?.kind === "short";
+}
+
 function createCard(prompt) {
   const card = document.createElement("article");
-  card.className = "prompt-card";
+  card.className = `prompt-card${isShort(prompt) ? " short-card" : ""}`;
 
   const info = document.createElement("div");
   info.className = "card-info";
@@ -214,7 +252,8 @@ function createCard(prompt) {
 
   const title = document.createElement("h2");
   title.className = "card-title";
-  title.textContent = prompt.title;
+  title.textContent = isShort(prompt) ? prompt.content : prompt.title;
+  title.title = title.textContent;
 
   const favorite = document.createElement("button");
   favorite.className = `favorite-button${prompt.favorite ? " active" : ""}`;
@@ -225,13 +264,16 @@ function createCard(prompt) {
   const edit = document.createElement("button");
   edit.className = "edit-button";
   edit.textContent = "編集";
-  edit.addEventListener("click", () => openEditor(prompt));
+  edit.addEventListener("click", () => isShort(prompt) ? openShortEditor(prompt) : openEditor(prompt));
 
   head.append(title, favorite, edit);
 
   const content = document.createElement("p");
   content.className = "card-content";
-  content.textContent = prompt.description || prompt.content;
+  content.textContent = [
+    currentFilter === "history" ? formatUsedAt(usage[prompt.id]) : "",
+    isShort(prompt) ? "短文" : (prompt.description || prompt.content)
+  ].filter(Boolean).join(" ・ ");
 
   info.append(head, content);
 
@@ -250,11 +292,22 @@ function createCard(prompt) {
   const actions = document.createElement("div");
   actions.className = "card-actions";
   actions.append(
-    actionButton("貼り付け", "button primary insert", () => insertIntoPage(prompt.content)),
-    actionButton("コピー", "button copy-action", () => copyPrompt(prompt.content))
+    actionButton("貼り付け", "button primary insert", () => insertIntoPage(prompt)),
+    actionButton("コピー", "button copy-action", () => copyPrompt(prompt))
   );
   card.append(info, actions);
   return card;
+}
+
+function formatUsedAt(at) {
+  if (!at) return "";
+  const date = new Date(at);
+  const today = new Date();
+  const sameDay = date.toDateString() === today.toDateString();
+  return new Intl.DateTimeFormat("ja-JP", sameDay
+    ? { hour: "2-digit", minute: "2-digit" }
+    : { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }
+  ).format(date);
 }
 
 function actionButton(label, className, handler) {
@@ -282,6 +335,55 @@ function openEditor(prompt = null) {
 
 function closeEditor() {
   els.dialog.close();
+}
+
+// A short phrase is a single line registered on its own, like a word added to
+// an IME dictionary: the text is both what is pasted and what the card shows.
+function openShortEditor(prompt = null) {
+  els.shortForm.reset();
+  els.shortInput.setCustomValidity("");
+  els.shortId.value = prompt?.id || "";
+  els.shortInput.value = prompt?.content || "";
+  els.shortFavoriteInput.checked = Boolean(prompt?.favorite);
+  els.shortDialogTitle.textContent = prompt ? "短文を編集" : "短文を追加";
+  els.deleteShortButton.classList.toggle("hidden", !prompt);
+  els.shortDialog.showModal();
+  els.shortInput.focus();
+}
+
+function closeShortEditor() {
+  els.shortDialog.close();
+}
+
+async function deletePrompt(id) {
+  const prompt = prompts.find((item) => item.id === id);
+  const approved = await askForConfirmation("delete", {
+    title: isShort(prompt) ? "短文を削除" : "プロンプトを削除",
+    message: `「${(isShort(prompt) ? prompt.content : prompt?.title) || "このプロンプト"}」を削除します。この操作は元に戻せません。`,
+    skipLabel: "今後は削除時の確認を省略する",
+    confirmLabel: "削除する",
+    danger: true
+  });
+  if (!approved) return false;
+  prompts = prompts.filter((prompt) => prompt.id !== id);
+  if (usage[id]) {
+    delete usage[id];
+    await chrome.storage.local.set({ [USAGE_KEY]: usage });
+  }
+  await savePrompts();
+  showToast("削除しました");
+  return true;
+}
+
+async function recordUsage(id) {
+  usage[id] = Date.now();
+  // Keep only what the history can show, plus room for entries that drop out
+  // of it after a deletion, so the record cannot grow without bound.
+  const kept = Object.entries(usage)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, HISTORY_LIMIT * 2);
+  usage = Object.fromEntries(kept);
+  await chrome.storage.local.set({ [USAGE_KEY]: usage });
 }
 
 async function savePrompts() {
@@ -338,12 +440,18 @@ async function toggleFavorite(id) {
   await savePrompts();
 }
 
-async function copyPrompt(content) {
-  await navigator.clipboard.writeText(content);
+async function copyPrompt(prompt) {
+  await navigator.clipboard.writeText(prompt.content);
+  await recordUsage(prompt.id);
+  render();
   showToast("クリップボードにコピーしました");
 }
 
-async function insertIntoPage(content) {
+async function insertIntoPage(prompt) {
+  const { content } = prompt;
+  // Recorded before pasting, because a successful paste closes the popup.
+  await recordUsage(prompt.id);
+  render();
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("active tab not found");
@@ -456,6 +564,10 @@ function openConfirmationSettings() {
 }
 
 els.addButton.addEventListener("click", () => openEditor());
+els.addShortButton.addEventListener("click", () => openShortEditor());
+els.closeShortDialog.addEventListener("click", closeShortEditor);
+els.cancelShortButton.addEventListener("click", closeShortEditor);
+els.shortInput.addEventListener("input", () => els.shortInput.setCustomValidity(""));
 els.confirmationSettingsButton.addEventListener("click", openConfirmationSettings);
 els.emptyAddButton.addEventListener("click", () => openEditor());
 els.closeDialog.addEventListener("click", closeEditor);
@@ -708,19 +820,58 @@ els.form.addEventListener("submit", async (event) => {
 els.deleteButton.addEventListener("click", async () => {
   const id = els.promptId.value;
   if (!id) return;
-  const prompt = prompts.find((item) => item.id === id);
-  const approved = await askForConfirmation("delete", {
-    title: "プロンプトを削除",
-    message: `「${prompt?.title || "このプロンプト"}」を削除します。この操作は元に戻せません。`,
-    skipLabel: "今後は削除時の確認を省略する",
-    confirmLabel: "削除する",
-    danger: true
-  });
-  if (!approved) return;
-  prompts = prompts.filter((prompt) => prompt.id !== id);
+  if (await deletePrompt(id)) closeEditor();
+});
+
+els.shortForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const id = els.shortId.value;
+  // One line is the point of a short phrase, so line breaks typed or pasted in
+  // are folded into spaces.
+  const content = els.shortInput.value.replace(/\s*\n\s*/g, " ").trim();
+  if (!content) {
+    els.shortInput.setCustomValidity("短文を入力してください。");
+    els.shortInput.reportValidity();
+    return;
+  }
+  const duplicate = prompts.some((prompt) =>
+    prompt.id !== id && isShort(prompt) && normalizeTitle(prompt.content) === normalizeTitle(content)
+  );
+  if (duplicate) {
+    els.shortInput.setCustomValidity("同じ短文がすでに登録されています。");
+    els.shortInput.reportValidity();
+    els.shortInput.focus();
+    return;
+  }
+
+  const existing = prompts.find((prompt) => prompt.id === id);
+  const data = {
+    id: id || crypto.randomUUID(),
+    // The title is what search, sorting and older builds of this extension use,
+    // so it carries the phrase itself.
+    title: content.slice(0, SHORT_TITLE_LENGTH),
+    description: "",
+    content,
+    tags: existing?.tags || [],
+    favorite: els.shortFavoriteInput.checked,
+    updatedAt: Date.now(),
+    kind: "short"
+  };
+
+  if (existing) {
+    prompts = prompts.map((prompt) => prompt.id === id ? data : prompt);
+  } else {
+    prompts.push(data);
+  }
   await savePrompts();
-  closeEditor();
-  showToast("削除しました");
+  closeShortEditor();
+  showToast("短文を保存しました");
+});
+
+els.deleteShortButton.addEventListener("click", async () => {
+  const id = els.shortId.value;
+  if (!id) return;
+  if (await deletePrompt(id)) closeShortEditor();
 });
 
 // The cloud sync engine writes a newer copy straight to storage, so the list is

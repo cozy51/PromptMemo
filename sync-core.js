@@ -39,6 +39,10 @@ function normalizePromptMemoRecord(prompt) {
     favorite: Boolean(prompt?.favorite),
     updatedAt: Number.isFinite(Number(prompt?.updatedAt)) ? Number(prompt.updatedAt) : 0
   };
+  // Only a short phrase carries a kind.  Leaving it off ordinary prompts keeps
+  // their fingerprints exactly as earlier releases wrote them, so upgrading does
+  // not by itself look like a change that needs syncing.
+  if (prompt?.kind === "short") normalized.kind = "short";
   // A record saved by a very old build may have no id.  Deriving one from the
   // content keeps it stable across devices: a random id would make the same
   // prompt look like a different record on every load and never stop syncing.

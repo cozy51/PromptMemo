@@ -17,6 +17,7 @@
       </div>
       <div class="header-actions">
         <button id="confirmationSettingsButton" class="button secondary header-button">確認設定</button>
+        <button id="addShortButton" class="button secondary header-button" title="1行の短文を登録" aria-label="短文を追加">＋短文</button>
         <button id="addButton" class="icon-button primary" title="プロンプトを追加" aria-label="プロンプトを追加">＋</button>
       </div>
     </header>
@@ -28,8 +29,10 @@
       </div>
 
       <nav id="filterBar" aria-label="絞り込み">
-        <button class="filter active" data-filter="favorite">★ お気に入り</button>
+        <button class="filter active" data-filter="history">履歴</button>
+        <button class="filter" data-filter="favorite">★ お気に入り</button>
         <button class="filter" data-filter="other">その他</button>
+        <button class="filter" data-filter="short">短文</button>
         <button class="filter" data-filter="tags">タグ別</button>
       </nav>
 
@@ -103,6 +106,34 @@
           <button type="button" id="deleteButton" class="button danger hidden">削除</button>
           <span class="spacer"></span>
           <button type="button" id="cancelButton" class="button secondary">キャンセル</button>
+          <button type="submit" class="button primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="shortDialog" class="small-dialog">
+      <form id="shortForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">SHORT PHRASE</p>
+            <h2 id="shortDialogTitle">短文を追加</h2>
+          </div>
+          <button type="button" id="closeShortDialog" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+
+        <input id="shortId" type="hidden" />
+        <label>
+          短文
+          <textarea id="shortInput" required rows="3" maxlength="500" placeholder="例：200字程度で要約してください。"></textarea>
+        </label>
+        <label class="favorite-check">
+          <input id="shortFavoriteInput" type="checkbox" />
+          <span>お気に入りに追加</span>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" id="deleteShortButton" class="button danger hidden">削除</button>
+          <span class="spacer"></span>
+          <button type="button" id="cancelShortButton" class="button secondary">キャンセル</button>
           <button type="submit" class="button primary">保存</button>
         </div>
       </form>

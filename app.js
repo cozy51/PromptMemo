@@ -2,6 +2,9 @@ const STORAGE_KEY = "promptMemoItems";
 const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
 const CONFIRMATION_SETTINGS_KEY = "promptMemoConfirmationSettings";
 const COLLAPSED_TAGS_KEY = "promptMemoCollapsedTags";
+// The tag picked in the tag view ("" shows every tag), remembered across visits.
+const SELECTED_TAG_KEY = "promptMemoSelectedTag";
+const UNTAGGED_LABEL = "タグなし";
 // When each prompt was last copied in this browser.  It is kept apart from
 // the prompts themselves on purpose: a stamp on the record would make every copy
 // an edit, and each one would be pushed to the cloud and fill its history.
@@ -21,6 +24,7 @@ const els = {
   emptyAddButton: document.querySelector("#emptyAddButton"),
   searchInput: document.querySelector("#searchInput"),
   filterBar: document.querySelector("#filterBar"),
+  tagFilterBar: document.querySelector("#tagFilterBar"),
   promptList: document.querySelector("#promptList"),
   emptyState: document.querySelector("#emptyState"),
   emptyTitle: document.querySelector("#emptyTitle"),
@@ -94,6 +98,7 @@ let confirmationSettings = {
   fullRestore: true
 };
 let collapsedTags = new Set();
+let selectedTag = "";
 let usage = {};
 let pendingConfirmation = null;
 let pendingImport = null;
@@ -105,12 +110,14 @@ async function init() {
     STORAGE_KEY,
     CONFIRMATION_SETTINGS_KEY,
     COLLAPSED_TAGS_KEY,
+    SELECTED_TAG_KEY,
     USAGE_KEY
   ]);
   prompts = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
   collapsedTags = new Set(
     Array.isArray(result[COLLAPSED_TAGS_KEY]) ? result[COLLAPSED_TAGS_KEY] : []
   );
+  selectedTag = typeof result[SELECTED_TAG_KEY] === "string" ? result[SELECTED_TAG_KEY] : "";
   usage = result[USAGE_KEY] && typeof result[USAGE_KEY] === "object" ? result[USAGE_KEY] : {};
   confirmationSettings = {
     ...confirmationSettings,
@@ -151,11 +158,22 @@ function render() {
         b.updatedAt - a.updatedAt
       );
 
-  const listItems = currentFilter === "tags"
-    ? createTagGroups(visible)
-    : visible.map(createCard);
+  let listItems;
+  if (currentFilter === "tags") {
+    // The chips list every tag in the library, whatever the search hides, so
+    // the row does not jump about while typing.
+    const allGroups = groupByTag(prompts);
+    if (selectedTag && !allGroups.some((group) => group.key === selectedTag)) selectedTag = "";
+    renderTagFilter(allGroups);
+    listItems = groupByTag(visible)
+      .filter((group) => !selectedTag || group.key === selectedTag)
+      .map(createTagGroup);
+  } else {
+    listItems = visible.map(createCard);
+  }
+  els.tagFilterBar.classList.toggle("hidden", currentFilter !== "tags");
   els.promptList.replaceChildren(...listItems);
-  const isEmpty = visible.length === 0;
+  const isEmpty = listItems.length === 0;
   els.promptList.classList.toggle("hidden", isEmpty);
   els.emptyState.classList.toggle("hidden", !isEmpty);
   els.emptyAddButton.classList.toggle("hidden", prompts.length > 0);
@@ -175,64 +193,84 @@ function render() {
   }
 }
 
-function createTagGroups(items) {
+function groupByTag(items) {
   const groups = new Map();
 
   for (const prompt of items) {
     const tags = Array.isArray(prompt.tags)
       ? prompt.tags.map((tag) => tag.trim()).filter(Boolean)
       : [];
-    const groupTags = tags.length ? tags : ["タグなし"];
+    const groupTags = tags.length ? tags : [UNTAGGED_LABEL];
 
     for (const tag of groupTags) {
       const key = tag.toLocaleLowerCase("ja");
-      if (!groups.has(key)) groups.set(key, { label: tag, prompts: [] });
+      if (!groups.has(key)) groups.set(key, { key, label: tag, prompts: [] });
       groups.get(key).prompts.push(prompt);
     }
   }
 
   return [...groups.values()]
     .sort((a, b) => {
-      if (a.label === "タグなし") return 1;
-      if (b.label === "タグなし") return -1;
+      if (a.label === UNTAGGED_LABEL) return 1;
+      if (b.label === UNTAGGED_LABEL) return -1;
       return a.label.localeCompare(b.label, "ja");
-    })
-    .map(({ label, prompts: taggedPrompts }) => {
-      const group = document.createElement("section");
-      group.className = "tag-group";
-
-      const heading = document.createElement("h2");
-      heading.className = "tag-group-title";
-
-      const toggle = document.createElement("button");
-      toggle.className = "tag-group-toggle";
-      toggle.type = "button";
-      toggle.dataset.tagKey = label.toLocaleLowerCase("ja");
-      toggle.setAttribute("aria-expanded", String(!collapsedTags.has(toggle.dataset.tagKey)));
-
-      const arrow = document.createElement("span");
-      arrow.className = "tag-group-arrow";
-      arrow.setAttribute("aria-hidden", "true");
-      arrow.textContent = "▼";
-
-      const name = document.createElement("span");
-      name.className = "tag-group-name";
-      name.textContent = label;
-
-      const count = document.createElement("span");
-      count.className = "tag-group-count";
-      count.textContent = `${taggedPrompts.length}件`;
-      toggle.append(arrow, name, count);
-      heading.append(toggle);
-
-      const cards = document.createElement("div");
-      cards.className = "tag-group-cards";
-      cards.classList.toggle("hidden", collapsedTags.has(toggle.dataset.tagKey));
-      cards.append(...taggedPrompts.map(createCard));
-
-      group.append(heading, cards);
-      return group;
     });
+}
+
+function renderTagFilter(groups) {
+  const chip = (key, label, count) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `tag-chip${key === selectedTag ? " active" : ""}`;
+    button.dataset.tag = key;
+    button.setAttribute("aria-pressed", String(key === selectedTag));
+    button.textContent = label;
+    if (count !== null) button.append(textSpan("tag-chip-count", String(count)));
+    return button;
+  };
+  els.tagFilterBar.replaceChildren(
+    chip("", "すべて", null),
+    ...groups.map((group) => chip(group.key, group.label, group.prompts.length))
+  );
+}
+
+function createTagGroup({ label, prompts: taggedPrompts }) {
+  const group = document.createElement("section");
+  group.className = "tag-group";
+
+  const heading = document.createElement("h2");
+  heading.className = "tag-group-title";
+
+  const toggle = document.createElement("button");
+  toggle.className = "tag-group-toggle";
+  toggle.type = "button";
+  toggle.dataset.tagKey = label.toLocaleLowerCase("ja");
+  // A tag picked on its own is shown open: a lone folded heading would look empty.
+  const collapsed = !selectedTag && collapsedTags.has(toggle.dataset.tagKey);
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+
+  const arrow = document.createElement("span");
+  arrow.className = "tag-group-arrow";
+  arrow.setAttribute("aria-hidden", "true");
+  arrow.textContent = "▼";
+
+  const name = document.createElement("span");
+  name.className = "tag-group-name";
+  name.textContent = label;
+
+  const count = document.createElement("span");
+  count.className = "tag-group-count";
+  count.textContent = `${taggedPrompts.length}件`;
+  toggle.append(arrow, name, count);
+  heading.append(toggle);
+
+  const cards = document.createElement("div");
+  cards.className = "tag-group-cards";
+  cards.classList.toggle("hidden", collapsed);
+  cards.append(...taggedPrompts.map(createCard));
+
+  group.append(heading, cards);
+  return group;
 }
 
 function isShort(prompt) {
@@ -267,14 +305,32 @@ function createCard(prompt) {
 
   head.append(title, favorite, edit);
 
+  // One line under the title: when it was used (in the history), then the
+  // description.  A prompt without one falls back to its text, which only the
+  // narrow layout shows: the wide one has the full text right below.
   const content = document.createElement("p");
   content.className = "card-content";
-  content.textContent = [
-    currentFilter === "history" ? formatUsedAt(usage[prompt.id]) : "",
-    isShort(prompt) ? "短文" : (prompt.description || prompt.content)
-  ].filter(Boolean).join(" ・ ");
+  const usedAt = currentFilter === "history" ? formatUsedAt(usage[prompt.id]) : "";
+  if (usedAt) content.append(textSpan("card-used", usedAt));
+  if (isShort(prompt)) {
+    content.append(textSpan("card-summary", "短文"));
+  } else if (prompt.description) {
+    content.append(textSpan("card-summary", prompt.description));
+  } else if (prompt.content) {
+    content.append(textSpan("card-summary card-summary-content", prompt.content));
+  }
 
   info.append(head, content);
+
+  // The prompt itself, for the wide layout.  A short phrase is its own title,
+  // so it has nothing more to show.
+  if (!isShort(prompt) && prompt.content) {
+    const body = document.createElement("p");
+    body.className = "card-prompt";
+    body.textContent = prompt.content;
+    body.title = prompt.content;
+    info.append(body);
+  }
 
   if (prompt.tags?.length) {
     const tags = document.createElement("div");
@@ -293,6 +349,13 @@ function createCard(prompt) {
   actions.append(actionButton("コピー", "button copy-action", () => copyPrompt(prompt)));
   card.append(info, actions);
   return card;
+}
+
+function textSpan(className, text) {
+  const span = document.createElement("span");
+  span.className = className;
+  span.textContent = text;
+  return span;
 }
 
 function formatUsedAt(at) {
@@ -700,6 +763,14 @@ els.filterBar.addEventListener("click", (event) => {
   if (!button) return;
   currentFilter = button.dataset.filter;
   els.filterBar.querySelectorAll(".filter").forEach((item) => item.classList.toggle("active", item === button));
+  render();
+});
+
+els.tagFilterBar.addEventListener("click", async (event) => {
+  const chip = event.target.closest("[data-tag]");
+  if (!chip) return;
+  selectedTag = chip.dataset.tag;
+  await promptMemoStorage.set({ [SELECTED_TAG_KEY]: selectedTag });
   render();
 });
 

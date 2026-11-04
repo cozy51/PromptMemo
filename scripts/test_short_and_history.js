@@ -26,10 +26,11 @@ function prompt(id, extra = {}) {
   };
 }
 
-function openPopup({ prompts = [], usage = null } = {}) {
+function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
   const store = {
     promptMemoItems: prompts,
-    ...(usage ? { promptMemoUsage: usage } : {})
+    ...(usage ? { promptMemoUsage: usage } : {}),
+    ...saved
   };
   const doc = createDocument(html);
   const clipboard = [];
@@ -61,13 +62,24 @@ function openPopup({ prompts = [], usage = null } = {}) {
     el,
     // The heading of each card, in the order shown.
     titles: () => cards().map((card) => card.children[0].children[0].children[0].textContent),
-    lines: () => cards().map((card) => card.children[0].children[1].textContent),
+    // The line under the heading, as the page shows it (its parts are spans).
+    lines: () => cards().map((card) => card.children[0].children[1].children
+      .map((span) => span.textContent).join(" ・ ")),
+    // The prompt text shown in the wide layout, if the card has one.
+    texts: () => cards().map((card) => card.children[0].querySelector(".card-prompt")?.textContent ?? null),
     async show(filter) {
       el("filterBar").dispatch("click", { target: { closest: () => ({ dataset: { filter } }) } });
       await settle();
     },
     async copy(index) {
       cards()[index].children[1].children[0].dispatch("click");
+      await settle();
+    },
+    // The heading of each tag group in the tag view.
+    groups: () => cards().map((group) => group.children[0].children[0].children[1].textContent),
+    chips: () => el("tagFilterBar").children.map((chip) => chip.textContent),
+    async pickTag(tag) {
+      el("tagFilterBar").dispatch("click", { target: { closest: () => ({ dataset: { tag } }) } });
       await settle();
     },
     async saveShort(text, { favorite = false } = {}) {
@@ -96,6 +108,8 @@ function openPopup({ prompts = [], usage = null } = {}) {
   // 2. Using a prompt moves it to the top of the history.
   await popup.show("favorite");
   check(popup.titles(), ["題名b"], "The favourites tab still works");
+  check(popup.texts(), ["本文b"], "A prompt card carries its text for the wide layout");
+  check(popup.lines(), ["本文b"], "…and, with no description, falls back to it on the line below the title");
   await popup.copy(0);
   check(popup.clipboard, ["本文b"], "Copy puts the prompt on the clipboard");
   await popup.show("history");
@@ -115,6 +129,7 @@ function openPopup({ prompts = [], usage = null } = {}) {
   await popup.show("short");
   check(popup.titles(), ["200字程度で 要約してください。"], "The short tab lists only short phrases");
   check(popup.lines(), ["短文"], "…marked as such");
+  check(popup.texts(), [null], "…with no second copy of the text");
   await popup.copy(0);
   check(popup.clipboard.at(-1), "200字程度で 要約してください。", "A short phrase copies its text");
   await popup.show("history");
@@ -137,7 +152,40 @@ function openPopup({ prompts = [], usage = null } = {}) {
   check(normalized.find((item) => item.id === saved.id).kind, "short", "A short phrase stays short through sync");
   check("kind" in normalized.find((item) => item.id === "a"), false, "An ordinary prompt gains no new field");
 
-  // 6. An empty history explains itself instead of saying nothing was found.
+  // 6. A description keeps its place on the line; the text is shown apart from it.
+  const described = openPopup({
+    prompts: [prompt("d", { description: "用途の説明", content: "1行目\n2行目" })],
+    usage: { d: Date.now() }
+  });
+  await settle();
+  check(described.lines()[0].endsWith(" ・ 用途の説明"), true, "The history shows when it was used, then the description");
+  check(described.texts(), ["1行目\n2行目"], "The text keeps its line breaks");
+
+  // 7. The tag view can show one tag at a time, and remembers the pick.
+  const tagged = openPopup({
+    prompts: [
+      prompt("g1", { tags: ["GEM"] }),
+      prompt("g2", { tags: ["GEM", "GPTs"] }),
+      prompt("p1", { tags: ["GPTs"] }),
+      prompt("n1")
+    ]
+  });
+  await settle();
+  check(tagged.el("tagFilterBar").classList.contains("hidden"), true, "The tag chips stay out of the other views");
+  await tagged.show("tags");
+  check(tagged.el("tagFilterBar").classList.contains("hidden"), false, "…and appear in the tag view");
+  check(tagged.chips(), ["すべて", "GEM", "GPTs", "タグなし"], "One chip per tag, untagged last");
+  check(tagged.groups(), ["GEM", "GPTs", "タグなし"], "Every tag is shown to begin with");
+  await tagged.pickTag("gpts");
+  check(tagged.groups(), ["GPTs"], "Picking a tag shows that tag alone");
+  check(tagged.store.promptMemoSelectedTag, "gpts", "…and the pick is remembered");
+  const reopened = openPopup({ prompts: tagged.store.promptMemoItems, saved: { promptMemoSelectedTag: "gpts" } });
+  await reopened.show("tags");
+  check(reopened.groups(), ["GPTs"], "The next visit opens on the same tag");
+  await tagged.pickTag("");
+  check(tagged.groups(), ["GEM", "GPTs", "タグなし"], "「すべて」 brings every tag back");
+
+  // 8. An empty history explains itself instead of saying nothing was found.
   const fresh = openPopup({ prompts: [prompt("a")] });
   await settle();
   check(fresh.titles(), [], "Nothing used yet, nothing in the history");

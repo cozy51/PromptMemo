@@ -16,13 +16,16 @@
 
 ### 手元で動かす
 
-静的ファイルなので、任意のWebサーバーで配信できます。
+Node.js（18以上）が必要です。追加のパッケージはありません。
 
 ```
-npx serve .
+npm install
+npm run dev
 ```
 
-（`index.html` をファイルとして直接開くと、クリップボードやクラウド同期が動かない場合があります）
+表示された `http://localhost:3000/` をブラウザで開きます（`vercel.json` と同じヘッダーを付けて配信するので、本番と同じ条件で確認できます）。ポートを変えるときは環境変数 `PORT` を指定します。
+
+`index.html` をファイルとして直接開くと、クリップボードやクラウド同期が動かない場合があります。
 
 ## 使い方
 
@@ -118,9 +121,5 @@ TodoMemoと同じバケットを共有できるよう、ファイル名にアプ
 同期の判断ロジック、実際の同期・履歴・復元の流れ、保存処理などを確認します。
 
 ```
-node scripts/test_cloud_sync.js
-node scripts/test_cloud_sync_flow.js
-node scripts/test_import_guard.js
-node scripts/test_short_and_history.js
-node scripts/test_storage.js
+npm test
 ```

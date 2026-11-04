@@ -29,7 +29,8 @@ function check(actual, expected, label) {
   storage.onChanged.addListener((change, area) => changes.push({ change, area }));
 
   check(typeof context.PROMPT_MEMO_VERSION, "undefined", "The version is a script constant, not a window property");
-  check(vm.runInContext("PROMPT_MEMO_VERSION", context).split(".").length, 3, "The version reads as x.y.z");
+  check(vm.runInContext("PROMPT_MEMO_VERSION", context), require("../package.json").version,
+    "The version shown in the app matches package.json");
 
   await storage.set({ items: [{ id: "a" }], at: "2026-11-04" });
   check(store.items, [{ id: "a" }], "Values are saved");

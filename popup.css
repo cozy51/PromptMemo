@@ -360,6 +360,23 @@ footer {
 .cloud-sync-status[data-state="saving"] { color: var(--muted); }
 .cloud-sync-status[data-state="error"] { color: var(--danger); }
 
+/* Signed out of a configured cloud: warm the canvas so "not syncing" is
+   visible at a glance, and point the eye at the login button. */
+body.cloud-signed-out {
+  --canvas: #fbecd9;
+  --line: #ecd3b3;
+}
+body.cloud-signed-out header { background: #fff6ea; }
+body.cloud-signed-out .cloud-sync-status,
+body.cloud-signed-out .cloud-sync-detail { color: #a24e0b; }
+body.cloud-signed-out #cloudSyncSignIn {
+  color: white;
+  border-color: #c2620f;
+  background: #c2620f;
+  font-weight: 700;
+}
+body.cloud-signed-out #cloudSyncSignIn:hover:not(:disabled) { background: #a24e0b; }
+
 .cloud-sync-detail {
   flex: none;
   color: var(--muted);

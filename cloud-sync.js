@@ -122,6 +122,9 @@
     if (els.syncNowButton) els.syncNowButton.hidden = !signedIn;
     if (els.historyButton) els.historyButton.hidden = !signedIn;
     if (els.resolveButton) els.resolveButton.hidden = !pendingConflict;
+    // Signed out of a configured cloud means edits stay on this PC only. That
+    // is easy to miss in a status line, so the whole popup turns warm instead.
+    document.body.classList.toggle("cloud-signed-out", configured && !signedIn);
   }
 
   function reportIdle() {

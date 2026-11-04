@@ -2,7 +2,7 @@
 // It keeps the small async get/set/remove/onChanged shape the rest of the code
 // was written against, so the cloud sync engine and the app only ever talk to
 // `promptMemoStorage`, never to localStorage directly.
-const PROMPT_MEMO_VERSION = "2.0.0";
+const PROMPT_MEMO_VERSION = "2.1.0";
 
 (function setupStorage() {
   const listeners = new Set();

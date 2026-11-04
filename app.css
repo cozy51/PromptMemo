@@ -98,6 +98,24 @@ main {
 nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
 .filter { padding: 6px 9px; white-space: nowrap; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); font-size: 12px; }
 .filter.active { color: var(--accent); border-color: #a7cdbd; background: var(--accent-soft); font-weight: 700; }
+/* The tag view's own row: one chip per tag, to show a single tag at a time. */
+.tag-filter { gap: 5px; margin-top: -4px; padding: 0 0 12px; }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.tag-chip:hover { border-color: #a7cdbd; }
+.tag-chip.active { color: white; border-color: var(--accent); background: var(--accent); font-weight: 700; }
+.tag-chip-count { color: var(--muted); font-size: 10px; font-weight: 600; }
+.tag-chip.active .tag-chip-count { color: rgba(255, 255, 255, 0.8); }
 
 #promptList {
   display: grid;
@@ -202,6 +220,11 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
 .edit-button { font-size: 11px; }
 .card-content { min-width: 0; overflow: hidden; color: #4f5c56; font-size: 10px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .short-card .card-content { color: var(--muted); }
+.card-content > span + span::before { content: " ・ "; }
+/* Placed explicitly: the prompt text sits below the title row and the copy
+   button, spanning the whole card. */
+.card-actions { grid-column: 2; grid-row: 2; }
+.card-prompt { display: none; }
 .tags { display: none; }
 .tag { padding: 3px 7px; border-radius: 5px; color: var(--accent); background: var(--accent-soft); font-size: 10px; }
 .card-actions { display: flex; gap: 4px; margin: 0; }
@@ -551,8 +574,34 @@ label input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0
   .prompt-card { min-height: 66px; padding: 10px 12px; }
   .card-title { font-size: 13px; }
   .card-content { font-size: 11px; }
+  /* The text is right below, so a missing description is not filled with it. */
+  .card-summary-content { display: none; }
+  .card-prompt {
+    display: -webkit-box;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 5px;
+    /* The vertical room is a transparent border, not padding: clipped text
+       still paints into padding, and the fifth line would peek out below. */
+    padding: 0 9px;
+    border-block: 7px solid transparent;
+    overflow: hidden;
+    border-radius: 7px;
+    color: var(--ink);
+    background: var(--canvas);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+  }
+  /* Cards in a row line up even when their texts differ in length. */
+  .prompt-card { align-content: start; }
   .card-actions .button { padding: 7px 12px; font-size: 11px; }
   .filter { padding: 7px 12px; font-size: 13px; }
+  .tag-chip { padding: 5px 11px; font-size: 12px; }
 
   /* The cloud panel and the data buttons sit side by side under the list. */
   footer {

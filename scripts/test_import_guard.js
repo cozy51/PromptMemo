@@ -1,17 +1,17 @@
 // Tests for the import confirmation: `node scripts/test_import_guard.js`.
 //
 // The popup is loaded as the browser loads it, against a fake DOM built from
-// popup.html, and files are handed to it exactly as the file input would.  What
+// index.html, and files are handed to it exactly as the file input would.  What
 // is checked is what the user sees before deciding: the two columns of counts,
 // the dates, the warning, and whether the button is available at all.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { createDocument, settle } = require("./fake_popup.js");
+const { createDocument, installStorage, settle } = require("./fake_popup.js");
 
 const root = path.join(__dirname, "..");
-const html = fs.readFileSync(path.join(root, "popup.html"), "utf8");
-const sources = ["sync-core.js", "popup.js"]
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const sources = ["sync-core.js", "app.js"]
   .map((name) => ({ name, code: fs.readFileSync(path.join(root, name), "utf8") }));
 
 function check(actual, expected, label) {
@@ -72,26 +72,12 @@ function openPopup({ prompts = [], updatedAt = NOW, settings = null } = {}) {
     navigator: { userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Edg/120.0" },
     document: doc,
     setTimeout,
-    clearTimeout,
-    chrome: {
-      runtime: { getManifest: () => ({ version: "1.2.0" }) },
-      storage: {
-        local: {
-          async get(keys) {
-            const list = Array.isArray(keys) ? keys : [keys];
-            return Object.fromEntries(list
-              .filter((key) => key in store)
-              .map((key) => [key, JSON.parse(JSON.stringify(store[key]))]));
-          },
-          async set(items) { Object.assign(store, JSON.parse(JSON.stringify(items))); }
-        },
-        onChanged: { addListener() {} }
-      }
-    }
+    clearTimeout
   };
   context.window = context;
   context.globalThis = context;
   vm.createContext(context);
+  installStorage(context, store);
   sources.forEach(({ name, code }) => vm.runInContext(code, context, { filename: name }));
   // The toast is the only feedback for an import that needs no dialog.
   const toast = doc.querySelector("#toast");

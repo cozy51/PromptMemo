@@ -1,0 +1,11 @@
+# Only the app itself is published; tests, tooling and the PDF manual stay in
+# the repository.
+scripts/
+output/
+README.md
+icons/icon-master*.png
+icons/icon-v2-*.png
+icons/icon-16.png
+icons/icon-32.png
+icons/icon-48.png
+icons/icon-128.png

@@ -1,5 +1,5 @@
-// Supabase is the authoritative copy of the prompt library; chrome.storage.local
-// is the offline copy of it.  Every upload is guarded by the revision the local
+// Supabase is the authoritative copy of the prompt library; this browser's
+// localStorage (through promptMemoStorage) is the offline copy of it.  Every upload is guarded by the revision the local
 // copy is based on, so a PC that has been closed, offline, or restored from an
 // old file can never quietly replace newer work made on another PC.  Whenever
 // the two sides genuinely disagree the user decides, and the losing side is
@@ -123,7 +123,7 @@
     if (els.historyButton) els.historyButton.hidden = !signedIn;
     if (els.resolveButton) els.resolveButton.hidden = !pendingConflict;
     // Signed out of a configured cloud means edits stay on this PC only. That
-    // is easy to miss in a status line, so the whole popup turns warm instead.
+    // is easy to miss in a status line, so the whole page turns warm instead.
     document.body.classList.toggle("cloud-signed-out", configured && !signedIn);
   }
 
@@ -156,7 +156,7 @@
   }
 
   async function loadConfig() {
-    const result = await chrome.storage.local.get([CONFIG_KEY, SYNC_STATE_KEY, DEVICE_ID_KEY]);
+    const result = await promptMemoStorage.get([CONFIG_KEY, SYNC_STATE_KEY, DEVICE_ID_KEY]);
     const stored = result[CONFIG_KEY] || {};
     config = {
       url: String(stored.url || "").trim().replace(/\/+$/, ""),
@@ -167,13 +167,13 @@
     deviceId = String(result[DEVICE_ID_KEY] || "");
     if (!deviceId) {
       deviceId = crypto.randomUUID();
-      await chrome.storage.local.set({ [DEVICE_ID_KEY]: deviceId });
+      await promptMemoStorage.set({ [DEVICE_ID_KEY]: deviceId });
     }
   }
 
   async function saveSyncState(state) {
     syncState = { ...createPromptMemoSyncState(), ...state };
-    await chrome.storage.local.set({ [SYNC_STATE_KEY]: syncState });
+    await promptMemoStorage.set({ [SYNC_STATE_KEY]: syncState });
     return syncState;
   }
 
@@ -182,17 +182,17 @@
   }
 
   async function loadLocalDataset() {
-    const result = await chrome.storage.local.get(DATA_KEY);
+    const result = await promptMemoStorage.get(DATA_KEY);
     return normalizePromptMemoDataset({ prompts: result[DATA_KEY] });
   }
 
   async function saveLocalDataset(dataset, updatedAt) {
-    // Written straight to storage: the popup redraws from the storage change
+    // Written straight to storage: the app redraws from the storage change
     // event, and `notifyLocalChange` is deliberately not called, because a copy
     // that came *from* the cloud must not be pushed back to it.  The stamp is
     // the moment the cloud copy was written, not now, so a later import is
     // compared against when the data actually changed.
-    await chrome.storage.local.set({
+    await promptMemoStorage.set({
       [DATA_KEY]: dataset.prompts,
       [DATA_UPDATED_AT_KEY]: updatedAt || new Date().toISOString()
     });
@@ -241,7 +241,9 @@
       kind: PROMPT_MEMO_BACKUP_KIND,
       version: 1,
       schemaVersion: PROMPT_MEMO_SCHEMA_VERSION,
-      extensionVersion: chrome.runtime.getManifest().version,
+      // Kept under its old name so documents written by the extension and by
+      // the web app read the same way.
+      extensionVersion: PROMPT_MEMO_VERSION,
       exportedAt: now.toISOString(),
       sync: {
         revision,
@@ -394,7 +396,7 @@
       });
     } else if (action === "idle" && !remote && isPromptMemoDatasetEmpty(local)) {
       setStatus("クラウドにデータがありません", "idle");
-      setDetail("このPCで追加すると保存されます");
+      setDetail("このブラウザで追加すると保存されます");
       return;
     }
     if (pendingConflict) return;
@@ -405,9 +407,9 @@
     const { kind, remote, local, risk } = pendingConflict;
     if (els.conflictReason) {
       els.conflictReason.textContent = kind === "shrink"
-        ? `このPCの内容はクラウドより${risk.removed}件少なくなっています。`
+        ? `このブラウザの内容はクラウドより${risk.removed}件少なくなっています。`
           + "誤操作やブラウザーデータの削除でないか確認してください。"
-        : "他のPCの変更と、このPCの未同期の変更が食い違っています。"
+        : "他の端末の変更と、このブラウザの未同期の変更が食い違っています。"
           + "どちらを残すか選んでください。選ばなかった方はクラウド履歴に退避します。";
     }
     if (els.conflictRemoteSummary) {
@@ -421,8 +423,8 @@
     }
     if (els.useLocalButton) {
       els.useLocalButton.textContent = kind === "shrink"
-        ? "確認した：このPCの内容で更新"
-        : "このPCの内容を残す";
+        ? "確認した：このブラウザの内容で更新"
+        : "このブラウザの内容を残す";
     }
     paused = true;
     pausedMessage = kind === "shrink"
@@ -473,7 +475,7 @@
   const HISTORY_LABELS = {
     auto: "上書き前の内容",
     normalized: "整理前の内容",
-    "local-conflict": "このPCの未同期分",
+    "local-conflict": "このブラウザの未同期分",
     "remote-replaced": "上書き前のクラウド"
   };
 
@@ -659,7 +661,7 @@
       return;
     }
     setStatus("ログインするとクラウドと同期します", "idle");
-    setDetail("ログアウト中の変更はこのPCだけに保存されます");
+    setDetail("ログアウト中の変更はこのブラウザだけに保存されます");
   }
 
   function createClient() {
@@ -667,12 +669,12 @@
     return createPromptMemoSupabaseClient({
       url: config.url,
       anonKey: config.anonKey,
-      loadSession: async () => (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] || null,
+      loadSession: async () => (await promptMemoStorage.get(SESSION_KEY))[SESSION_KEY] || null,
       saveSession: async (session) => {
         if (session) {
-          await chrome.storage.local.set({ [SESSION_KEY]: session });
+          await promptMemoStorage.set({ [SESSION_KEY]: session });
         } else {
-          await chrome.storage.local.remove(SESSION_KEY);
+          await promptMemoStorage.remove(SESSION_KEY);
         }
       }
     });
@@ -755,7 +757,7 @@
     // must not make the user sign in again.
     const changedProject = next.url !== config.url || next.anonKey !== config.anonKey;
     config = next;
-    await chrome.storage.local.set({ [CONFIG_KEY]: config });
+    await promptMemoStorage.set({ [CONFIG_KEY]: config });
     els.settingsDialog.close();
 
     if (changedDocument) {
@@ -764,7 +766,7 @@
     }
     if (changedProject) {
       user = null;
-      await chrome.storage.local.remove(SESSION_KEY);
+      await promptMemoStorage.remove(SESSION_KEY);
     }
     client = createClient();
     window.promptMemoUI.toast("クラウド設定を保存しました");
@@ -819,6 +821,13 @@
   // The dialog must not be dismissable by accident: an unresolved conflict keeps
   // sync paused, which is the safe state.
   els.conflictDialog?.addEventListener("cancel", (event) => event.preventDefault());
+
+  // Another tab of the app may sync while this one is open; follow the revision
+  // it recorded, or this tab would later mistake its own copy for a stale one.
+  promptMemoStorage.onChanged.addListener((changes) => {
+    const change = changes[SYNC_STATE_KEY];
+    if (change?.newValue) syncState = sanitizePromptMemoSyncState(change.newValue);
+  });
 
   window.promptMemoCloudSync = {
     notifyLocalChange,

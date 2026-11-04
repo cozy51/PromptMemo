@@ -1,5 +1,5 @@
-// A DOM small enough to run the popup's scripts under Node, built from the ids
-// popup.html actually declares.  Asking for an element the page does not have
+// A DOM small enough to run the app's scripts under Node, built from the ids
+// index.html actually declares.  Asking for an element the page does not have
 // throws, so a control the code talks to but the page never declares fails the
 // test that uses it.
 function createElement(tag = "div") {
@@ -69,6 +69,7 @@ function createDocument(html) {
   const elements = new Map(ids.map((id) => [id, createElement()]));
   return {
     elements,
+    body: createElement("body"),
     visibilityState: "visible",
     addEventListener() {},
     createElement: (tag) => createElement(tag),
@@ -76,11 +77,32 @@ function createDocument(html) {
       if (!selector.startsWith("#")) return null;
       const id = selector.slice(1);
       if (!elements.has(id)) {
-        throw new Error(`popup.html has no element with id "${id}"`);
+        throw new Error(`index.html has no element with id "${id}"`);
       }
       return elements.get(id);
     }
   };
+}
+
+// The browser's localStorage, kept as plain values in `store` so a test can
+// read and change what the app saved without going through JSON itself.
+function createLocalStorage(store) {
+  return {
+    getItem: (key) => (key in store ? JSON.stringify(store[key]) : null),
+    setItem: (key, value) => { store[key] = JSON.parse(String(value)); },
+    removeItem: (key) => { delete store[key]; }
+  };
+}
+
+// Load the real storage.js into `context`, backed by `store`.
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+const storageCode = fs.readFileSync(path.join(__dirname, "..", "storage.js"), "utf8");
+function installStorage(context, store) {
+  context.localStorage = createLocalStorage(store);
+  context.addEventListener ||= () => {};
+  vm.runInContext(storageCode, context, { filename: "storage.js" });
 }
 
 // Let every queued promise chain in the scripts run to completion.
@@ -90,4 +112,4 @@ async function settle(rounds = 60) {
   }
 }
 
-module.exports = { createElement, createDocument, settle };
+module.exports = { createElement, createDocument, createLocalStorage, installStorage, settle };

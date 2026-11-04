@@ -2,16 +2,16 @@
 //
 // The engine is loaded exactly as the popup loads it, against a fake Supabase
 // (an in-memory bucket behind a fake `fetch`) and a fake popup built from the
-// ids in popup.html.  Two "PCs" share the bucket, so the paths that matter —
+// ids in index.html.  Two "PCs" share the bucket, so the paths that matter —
 // seeding, pulling, conflicting, and restoring — are exercised for real, and a
 // control the engine talks to but the page never declares fails the test.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { createDocument, settle } = require("./fake_popup.js");
+const { createDocument, installStorage, settle } = require("./fake_popup.js");
 
 const root = path.join(__dirname, "..");
-const html = fs.readFileSync(path.join(root, "popup.html"), "utf8");
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const sources = ["sync-core.js", "supabase-client.js", "cloud-sync.js"]
   .map((name) => ({ name, code: fs.readFileSync(path.join(root, name), "utf8") }));
 
@@ -100,26 +100,9 @@ function createDevice(cloud, { prompts = [], config = null, session = null } = {
   const doc = createDocument(html);
   const timers = new Set();
 
-  const chrome = {
-    runtime: { getManifest: () => ({ version: "1.2.0" }) },
-    storage: {
-      local: {
-        async get(keys) {
-          const list = Array.isArray(keys) ? keys : [keys];
-          return Object.fromEntries(list
-            .filter((key) => key in store)
-            .map((key) => [key, JSON.parse(JSON.stringify(store[key]))]));
-        },
-        async set(items) { Object.assign(store, JSON.parse(JSON.stringify(items))); },
-        async remove(key) { delete store[key]; }
-      },
-      onChanged: { addListener() {} }
-    }
-  };
-
   const context = {
     JSON, Math, Number, String, Boolean, Array, Object, Date, RegExp, Set, Map,
-    Promise, Intl, URL, Error, console, chrome,
+    Promise, Intl, URL, Error, console,
     crypto: { randomUUID: () => `id-${Math.random().toString(36).slice(2)}` },
     navigator: { userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Edg/120.0" },
     fetch: cloud.fetch,
@@ -138,6 +121,7 @@ function createDevice(cloud, { prompts = [], config = null, session = null } = {
     toast: () => {}
   };
   vm.createContext(context);
+  installStorage(context, store);
   sources.forEach(({ name, code }) => vm.runInContext(code, context, { filename: name }));
 
   return {
@@ -145,6 +129,7 @@ function createDevice(cloud, { prompts = [], config = null, session = null } = {
     context,
     el: (id) => doc.querySelector(`#${id}`),
     status: () => doc.querySelector("#cloudSyncStatus").textContent,
+    warm: () => doc.body.classList.contains("cloud-signed-out"),
     sync: () => context.window.promptMemoCloudSync.syncNow(),
     async edit(next) {
       store.promptMemoItems = next;
@@ -188,6 +173,7 @@ function prompt(id, extra = {}) {
   check(cloud.history().length, 0, "Seeding an empty cloud archives nothing");
   check(first.el("cloudSyncNow").hidden, false, "A signed-in PC can sync on demand");
   check(first.el("cloudSyncSettings").hidden, false, "The settings button is always available");
+  check(first.warm(), false, "A signed-in page keeps its usual colours");
 
   // 2. A second PC starts empty and adopts the cloud copy.
   const second = createDevice(cloud, { prompts: [], config: CONFIG, session: SESSION });
@@ -292,7 +278,7 @@ function prompt(id, extra = {}) {
   check(cloud.latest().counts.prompts, 6, "Nothing was deleted in the cloud meanwhile");
   check(
     first.el("cloudConflictUseLocal").textContent,
-    "確認した：このPCの内容で更新",
+    "確認した：このブラウザの内容で更新",
     "The confirming button says what it confirms"
   );
 
@@ -308,6 +294,7 @@ function prompt(id, extra = {}) {
   await settle();
   check(fresh.status(), "クラウド同期は未設定（ローカル保存のみ）", "An unconfigured PC says so");
   check(fresh.el("cloudSyncSignIn").hidden, true, "…and offers no sign-in yet");
+  check(fresh.warm(), false, "…and is not flagged, since it never meant to sync");
 
   fresh.el("cloudUrlInput").value = `${CONFIG.url}/`;
   fresh.el("cloudKeyInput").value = CONFIG.anonKey;
@@ -318,6 +305,7 @@ function prompt(id, extra = {}) {
   check(fresh.store.promptMemoCloudConfig.bucket, "todo-backups", "An empty bucket falls back to the default");
   check(fresh.status(), "ログインするとクラウドと同期します", "Configured but signed out");
   check(fresh.el("cloudSyncSignIn").hidden, false, "…and now offers sign-in");
+  check(fresh.warm(), true, "…and the page turns warm while edits stay in this browser");
 
   fresh.el("cloudEmailInput").value = "someone@example.com";
   fresh.el("cloudPasswordInput").value = "wrong";
@@ -334,6 +322,7 @@ function prompt(id, extra = {}) {
   fresh.el("cloudSignInForm").dispatch("submit");
   await settle();
   check(fresh.store.promptMemoCloudSession.user.id, "user-1", "The session is remembered for next time");
+  check(fresh.warm(), false, "Signing in returns the usual colours");
   check(fresh.el("cloudPasswordInput").value, "", "The password is not left in the field");
   // This PC holds one prompt of its own against an established cloud copy, which
   // is exactly the divergence the engine must not resolve on its own.

@@ -2,7 +2,7 @@ const STORAGE_KEY = "promptMemoItems";
 const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
 const CONFIRMATION_SETTINGS_KEY = "promptMemoConfirmationSettings";
 const COLLAPSED_TAGS_KEY = "promptMemoCollapsedTags";
-// When each prompt was last pasted or copied on this PC.  It is kept apart from
+// When each prompt was last copied in this browser.  It is kept apart from
 // the prompts themselves on purpose: a stamp on the record would make every copy
 // an edit, and each one would be pushed to the cloud and fill its history.
 const USAGE_KEY = "promptMemoUsage";
@@ -101,7 +101,7 @@ let pendingImport = null;
 init();
 
 async function init() {
-  const result = await chrome.storage.local.get([
+  const result = await promptMemoStorage.get([
     STORAGE_KEY,
     CONFIRMATION_SETTINGS_KEY,
     COLLAPSED_TAGS_KEY,
@@ -122,8 +122,7 @@ async function init() {
 }
 
 function renderVersion() {
-  const version = chrome.runtime.getManifest().version;
-  els.versionBadge.textContent = `v${version}`;
+  els.versionBadge.textContent = `v${PROMPT_MEMO_VERSION}`;
 }
 
 function render() {
@@ -163,7 +162,7 @@ function render() {
 
   if (prompts.length && isEmpty && currentFilter === "history" && !query) {
     els.emptyTitle.textContent = "まだ使用履歴がありません";
-    els.emptyText.textContent = "貼り付け・コピーしたプロンプトが、新しい順にここへ並びます。";
+    els.emptyText.textContent = "コピーしたプロンプトが、新しい順にここへ並びます。";
   } else if (prompts.length && isEmpty && currentFilter === "short" && !query) {
     els.emptyTitle.textContent = "短文がありません";
     els.emptyText.textContent = "「＋短文」から、1行の指示を本文だけで登録できます。";
@@ -291,10 +290,7 @@ function createCard(prompt) {
 
   const actions = document.createElement("div");
   actions.className = "card-actions";
-  actions.append(
-    actionButton("貼り付け", "button primary insert", () => insertIntoPage(prompt)),
-    actionButton("コピー", "button copy-action", () => copyPrompt(prompt))
-  );
+  actions.append(actionButton("コピー", "button copy-action", () => copyPrompt(prompt)));
   card.append(info, actions);
   return card;
 }
@@ -368,7 +364,7 @@ async function deletePrompt(id) {
   prompts = prompts.filter((prompt) => prompt.id !== id);
   if (usage[id]) {
     delete usage[id];
-    await chrome.storage.local.set({ [USAGE_KEY]: usage });
+    await promptMemoStorage.set({ [USAGE_KEY]: usage });
   }
   await savePrompts();
   showToast("削除しました");
@@ -383,13 +379,13 @@ async function recordUsage(id) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, HISTORY_LIMIT * 2);
   usage = Object.fromEntries(kept);
-  await chrome.storage.local.set({ [USAGE_KEY]: usage });
+  await promptMemoStorage.set({ [USAGE_KEY]: usage });
 }
 
 async function savePrompts() {
   // Remember when the library last changed, so an import can tell whether the
   // file it is about to apply predates what is already here.
-  await chrome.storage.local.set({
+  await promptMemoStorage.set({
     [STORAGE_KEY]: prompts,
     [DATA_UPDATED_AT_KEY]: new Date().toISOString()
   });
@@ -408,7 +404,7 @@ async function backupToFile() {
     pad(now.getMonth() + 1),
     pad(now.getDate())
   ].join("-") + `_${pad(now.getHours())}${pad(now.getMinutes())}`;
-  const filename = `backup-ext_PromptMemo_${timestamp}.json`;
+  const filename = `backup-web_PromptMemo_${timestamp}.json`;
   const backup = {
     format: "prompt-memo",
     kind: "full-backup",
@@ -419,17 +415,16 @@ async function backupToFile() {
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
-  try {
-    await chrome.downloads.download({
-      url,
-      filename,
-      conflictAction: "uniquify",
-      saveAs: false
-    });
-    return filename;
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
+  // A web page cannot pick the download folder, so the browser's own download
+  // handling decides where the file goes, as it does for any other download.
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return filename;
 }
 
 async function toggleFavorite(id) {
@@ -441,77 +436,15 @@ async function toggleFavorite(id) {
 }
 
 async function copyPrompt(prompt) {
-  await navigator.clipboard.writeText(prompt.content);
+  try {
+    await navigator.clipboard.writeText(prompt.content);
+  } catch {
+    showToast("コピーできませんでした（ブラウザがクリップボードへの書き込みを許可していません）");
+    return;
+  }
   await recordUsage(prompt.id);
   render();
   showToast("クリップボードにコピーしました");
-}
-
-async function insertIntoPage(prompt) {
-  const { content } = prompt;
-  // Recorded before pasting, because a successful paste closes the popup.
-  await recordUsage(prompt.id);
-  render();
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) throw new Error("active tab not found");
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: insertText,
-      args: [content]
-    });
-
-    if (!results?.[0]?.result) {
-      await navigator.clipboard.writeText(content);
-      showToast("入力欄が未選択のためコピーしました");
-      return;
-    }
-    window.close();
-  } catch {
-    await navigator.clipboard.writeText(content);
-    showToast("このページには挿入できないためコピーしました");
-  }
-}
-
-function insertText(text) {
-  const element = document.activeElement;
-  if (!element) return false;
-
-  if (element instanceof HTMLTextAreaElement || (element instanceof HTMLInputElement && /^(text|search|url|email|tel|password)$/i.test(element.type))) {
-    const start = element.selectionStart ?? element.value.length;
-    const end = element.selectionEnd ?? start;
-    element.setRangeText(text, start, end, "end");
-    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-    element.focus();
-    return true;
-  }
-
-  const editable = element.closest?.('[contenteditable="true"], [contenteditable="plaintext-only"]');
-  if (editable) {
-    const selection = window.getSelection();
-    if (!selection?.rangeCount || !editable.contains(selection.anchorNode)) {
-      const range = document.createRange();
-      range.selectNodeContents(editable);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    const node = document.createTextNode(text);
-    range.insertNode(node);
-    range.setStartAfter(node);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    editable.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
-    editable.focus();
-    return true;
-  }
-
-  return false;
 }
 
 function showToast(message) {
@@ -526,7 +459,7 @@ function normalizeTitle(title) {
 }
 
 async function saveConfirmationSettings() {
-  await chrome.storage.local.set({ [CONFIRMATION_SETTINGS_KEY]: confirmationSettings });
+  await promptMemoStorage.set({ [CONFIRMATION_SETTINGS_KEY]: confirmationSettings });
 }
 
 // `type` names the confirmation setting that can switch this dialog off.  Cloud
@@ -637,7 +570,7 @@ els.importFile.addEventListener("change", async () => {
     const assessment = assessPromptMemoImport({
       fileExportedAt: parsed?.exportedAt,
       fileDataset: dataset,
-      currentUpdatedAt: (await chrome.storage.local.get(DATA_UPDATED_AT_KEY))[DATA_UPDATED_AT_KEY],
+      currentUpdatedAt: (await promptMemoStorage.get(DATA_UPDATED_AT_KEY))[DATA_UPDATED_AT_KEY],
       currentDataset: current
     });
     // Nothing to overwrite, or a plainly newer file the user has already chosen
@@ -780,7 +713,7 @@ els.promptList.addEventListener("click", async (event) => {
   } else {
     collapsedTags.add(key);
   }
-  await chrome.storage.local.set({ [COLLAPSED_TAGS_KEY]: [...collapsedTags] });
+  await promptMemoStorage.set({ [COLLAPSED_TAGS_KEY]: [...collapsedTags] });
   render();
 });
 
@@ -847,7 +780,7 @@ els.shortForm.addEventListener("submit", async (event) => {
   const existing = prompts.find((prompt) => prompt.id === id);
   const data = {
     id: id || crypto.randomUUID(),
-    // The title is what search, sorting and older builds of this extension use,
+    // The title is what search, sorting and older builds of this app use,
     // so it carries the phrase itself.
     title: content.slice(0, SHORT_TITLE_LENGTH),
     description: "",
@@ -876,7 +809,7 @@ els.deleteShortButton.addEventListener("click", async () => {
 
 // The cloud sync engine writes a newer copy straight to storage, so the list is
 // redrawn from there instead of letting it reach into this file's state.
-chrome.storage.onChanged.addListener((changes, area) => {
+promptMemoStorage.onChanged.addListener((changes, area) => {
   const change = area === "local" ? changes[STORAGE_KEY] : null;
   if (!change || !Array.isArray(change.newValue)) return;
   // This fires for our own saves too, and redrawing then would fight with an
@@ -886,7 +819,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   render();
 });
 
-// Shared with cloud-sync.js so its dialogs reuse this popup's confirmation and
+// Shared with cloud-sync.js so its dialogs reuse this page's confirmation and
 // toast instead of the browser's blocking ones.
 window.promptMemoUI = {
   confirm: (options) => askForConfirmation(null, options),

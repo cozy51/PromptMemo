@@ -1,16 +1,16 @@
 // Tests for short phrases and the usage history: `node scripts/test_short_and_history.js`.
 //
-// The popup is loaded against a fake DOM built from popup.html, as in
+// The popup is loaded against a fake DOM built from index.html, as in
 // test_import_guard.js.  What is checked is what the user sees: which cards each
 // tab shows and in what order, and what is stored when they save or use one.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { createDocument, settle } = require("./fake_popup.js");
+const { createDocument, installStorage, settle } = require("./fake_popup.js");
 
 const root = path.join(__dirname, "..");
-const html = fs.readFileSync(path.join(root, "popup.html"), "utf8");
-const sources = ["sync-core.js", "popup.js"]
+const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const sources = ["sync-core.js", "app.js"]
   .map((name) => ({ name, code: fs.readFileSync(path.join(root, name), "utf8") }));
 
 function check(actual, expected, label) {
@@ -45,26 +45,12 @@ function openPopup({ prompts = [], usage = null } = {}) {
     },
     document: doc,
     setTimeout,
-    clearTimeout,
-    chrome: {
-      runtime: { getManifest: () => ({ version: "1.2.0" }) },
-      storage: {
-        local: {
-          async get(keys) {
-            const list = Array.isArray(keys) ? keys : [keys];
-            return Object.fromEntries(list
-              .filter((key) => key in store)
-              .map((key) => [key, JSON.parse(JSON.stringify(store[key]))]));
-          },
-          async set(items) { Object.assign(store, JSON.parse(JSON.stringify(items))); }
-        },
-        onChanged: { addListener() {} }
-      }
-    }
+    clearTimeout
   };
   context.window = context;
   context.globalThis = context;
   vm.createContext(context);
+  installStorage(context, store);
   sources.forEach(({ name, code }) => vm.runInContext(code, context, { filename: name }));
 
   const el = (id) => doc.querySelector(`#${id}`);
@@ -81,7 +67,7 @@ function openPopup({ prompts = [], usage = null } = {}) {
       await settle();
     },
     async copy(index) {
-      cards()[index].children[1].children[1].dispatch("click");
+      cards()[index].children[1].children[0].dispatch("click");
       await settle();
     },
     async saveShort(text, { favorite = false } = {}) {
@@ -102,6 +88,9 @@ function openPopup({ prompts = [], usage = null } = {}) {
   });
   await settle();
   check(popup.titles(), ["題名c", "題名a"], "The history opens first, most recently used on top");
+  // A web page cannot type into another tab, so copying is the only action.
+  check(popup.el("promptList").children[0].children[1].children.map((button) => button.textContent), ["コピー"],
+    "Each card offers copy alone");
   check(popup.el("emptyState").classList.contains("hidden"), true, "…and is not empty");
 
   // 2. Using a prompt moves it to the top of the history.

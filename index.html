@@ -3,8 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="よく使うAIプロンプトを保存し、すぐに検索・コピーできます。" />
+    <meta name="theme-color" content="#176b4d" />
     <title>Prompt Memo</title>
-    <link rel="stylesheet" href="popup.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-v3-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-v3-16.png" />
+    <link rel="apple-touch-icon" href="icons/icon-v3-128.png" />
+    <link rel="stylesheet" href="app.css" />
   </head>
   <body>
     <header>
@@ -326,7 +331,7 @@
           <button type="button" id="closeCloudHistory" class="icon-button" aria-label="閉じる">×</button>
         </div>
         <p class="cloud-note">
-          クラウドが上書きされるたびに、上書き前の内容を1件ずつ保管します。直近30件はすべて残し、それより古いものは1日1件で最大30日分を残します。戻す操作も新しい版として記録するため、他のPCにも安全に反映されます。
+          クラウドが上書きされるたびに、上書き前の内容を1件ずつ保管します。直近30件はすべて残し、それより古いものは1日1件で最大30日分を残します。戻す操作も新しい版として記録するため、他の端末にも安全に反映されます。
         </p>
         <ul id="cloudHistoryList" class="cloud-history-list"></ul>
         <p id="cloudHistoryEmpty" class="cloud-note">まだ履歴はありません</p>
@@ -344,11 +349,11 @@
         <p id="cloudConflictReason" class="cloud-warning"></p>
         <div class="cloud-conflict-choices">
           <div class="cloud-conflict-choice">
-            <span class="cloud-conflict-label">クラウド（他のPCを含む最新）</span>
+            <span class="cloud-conflict-label">クラウド（他の端末を含む最新）</span>
             <strong id="cloudConflictRemoteSummary"></strong>
           </div>
           <div class="cloud-conflict-choice">
-            <span class="cloud-conflict-label">このPC（未同期の内容）</span>
+            <span class="cloud-conflict-label">このブラウザ（未同期の内容）</span>
             <strong id="cloudConflictLocalSummary"></strong>
           </div>
         </div>
@@ -357,16 +362,17 @@
         </p>
         <div class="dialog-actions cloud-conflict-actions">
           <button type="button" id="cloudConflictLater" class="button secondary compact">あとで決める</button>
-          <button type="button" id="cloudConflictUseLocal" class="button secondary compact">このPCの内容を残す</button>
+          <button type="button" id="cloudConflictUseLocal" class="button secondary compact">このブラウザの内容を残す</button>
           <button type="button" id="cloudConflictUseRemote" class="button primary compact">クラウドの内容を残す</button>
         </div>
       </div>
     </dialog>
 
     <div id="toast" role="status" aria-live="polite"></div>
+    <script src="storage.js"></script>
     <script src="sync-core.js"></script>
     <script src="supabase-client.js"></script>
-    <script src="popup.js"></script>
+    <script src="app.js"></script>
     <script src="cloud-sync.js"></script>
   </body>
 </html>

@@ -220,6 +220,9 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
 .edit-button { font-size: 11px; }
 .card-content { min-width: 0; overflow: hidden; color: #4f5c56; font-size: 10px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .short-card .card-content { color: var(--muted); }
+/* A short phrase is its own title, so it is shown in full, wrapping as needed,
+   instead of being cut off with an ellipsis. */
+.short-card .card-title { overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; }
 .card-content > span + span::before { content: " ・ "; }
 /* Placed explicitly: the prompt text sits below the title row and the copy
    button, spanning the whole card. */
@@ -567,7 +570,9 @@ label input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0
 @media (min-width: 720px) {
   #promptList,
   .tag-group-cards {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    /* At most two columns: three narrow ones were hard to read.  Below about
+       740px of list width the cards stack in a single column. */
+    grid-template-columns: repeat(auto-fill, minmax(max(360px, calc((100% - 10px) / 2)), 1fr));
     gap: 10px;
   }
 

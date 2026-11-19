@@ -224,6 +224,30 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
   await counted.show("favorite");
   check(chipState(), ["GEM1", "GPTs0×"], "…and so does every other tab");
 
+  // 7c. A tag field offers the library's tags as chips, added with a tap.
+  const picking = openPopup({ prompts: [prompt("a", { tags: ["GEM", "GPTs"] }), prompt("b")] });
+  await settle();
+  picking.el("addShortButton").dispatch("click");
+  const picker = picking.el("shortTagPicker");
+  const pickChip = (tag) => picker.dispatch("click", { target: { closest: () => ({ dataset: { tag } }) } });
+  check(picker.children.map((chip) => chip.textContent), ["GEM", "GPTs"], "The short dialog lists the existing tags");
+  check(picker.classList.contains("hidden"), false, "…where they can be seen");
+  picking.el("shortTagsInput").value = "仕事";
+  pickChip("GEM");
+  check(picking.el("shortTagsInput").value, "仕事, GEM", "A tap adds the tag to what was typed");
+  check(picker.children.map((chip) => chip.classList.contains("active")), [true, false], "…and marks the chip");
+  pickChip("GEM");
+  check(picking.el("shortTagsInput").value, "仕事", "Another tap takes it out");
+  picking.el("shortTagsInput").value = "gpts";
+  picking.el("shortTagsInput").dispatch("input");
+  check(picker.children.map((chip) => chip.classList.contains("active")), [false, true], "Typed tags light up their chip");
+  picking.el("addButton").dispatch("click");
+  check(picking.el("tagPicker").children.map((chip) => chip.textContent), ["GEM", "GPTs"], "The prompt dialog lists them too");
+  const bare = openPopup({ prompts: [prompt("a")] });
+  await settle();
+  bare.el("addShortButton").dispatch("click");
+  check(bare.el("shortTagPicker").classList.contains("hidden"), true, "With no tags yet there is nothing to pick");
+
   // 7b. Short phrases have their own tab and stay out of "other".
   const mixed = openPopup({ prompts: [prompt("p"), prompt("s", { kind: "short" })] });
   await mixed.show("other");

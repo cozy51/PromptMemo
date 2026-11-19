@@ -175,9 +175,9 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
     ]
   });
   await settle();
-  check(tagged.el("tagFilterBar").classList.contains("hidden"), true, "The tag chips stay out of the other views");
+  check(tagged.el("tagFilterBar").classList.contains("hidden"), false, "The tag chips are shown without opening the tag view");
   await tagged.show("tags");
-  check(tagged.el("tagFilterBar").classList.contains("hidden"), false, "…and appear in the tag view");
+  check(tagged.el("tagFilterBar").classList.contains("hidden"), false, "…and in the tag view too");
   check(tagged.chips(), ["すべて", "GEM", "GPTs", "タグなし"], "One chip per tag, untagged last");
   check(tagged.groups(), ["GEM", "GPTs", "タグなし"], "Every tag is shown to begin with");
   await tagged.pickTag("gpts");
@@ -186,8 +186,18 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
   const reopened = openPopup({ prompts: tagged.store.promptMemoItems, saved: { promptMemoSelectedTag: "gpts" } });
   await reopened.show("tags");
   check(reopened.groups(), ["GPTs"], "The next visit opens on the same tag");
+  await tagged.show("other");
+  check(tagged.titles(), ["題名g2", "題名p1"], "In another tab the picked tag narrows the list");
+  await tagged.pickTag("タグなし");
+  check(tagged.titles(), ["題名n1"], "…including the prompts with no tag");
   await tagged.pickTag("");
+  check(tagged.titles(), ["題名g1", "題名g2", "題名n1", "題名p1"], "「すべて」 shows the whole tab again");
+  await tagged.show("tags");
   check(tagged.groups(), ["GEM", "GPTs", "タグなし"], "「すべて」 brings every tag back");
+
+  const noTags = openPopup({ prompts: [prompt("a")] });
+  await settle();
+  check(noTags.el("tagFilterBar").classList.contains("hidden"), true, "A library with no tags keeps the row out of the way");
 
   // 8. An empty history explains itself instead of saying nothing was found.
   const fresh = openPopup({ prompts: [prompt("a")] });

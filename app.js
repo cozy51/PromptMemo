@@ -2,7 +2,8 @@ const STORAGE_KEY = "promptMemoItems";
 const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
 const CONFIRMATION_SETTINGS_KEY = "promptMemoConfirmationSettings";
 const COLLAPSED_TAGS_KEY = "promptMemoCollapsedTags";
-// The tag picked in the tag view ("" shows every tag), remembered across visits.
+// The tag picked in the tag row ("" shows every tag), remembered across visits.
+// The row is shown in every tab, and the pick narrows whichever tab is open.
 const SELECTED_TAG_KEY = "promptMemoSelectedTag";
 const UNTAGGED_LABEL = "タグなし";
 // When each prompt was last copied in this browser.  It is kept apart from
@@ -141,14 +142,24 @@ function render() {
       const searchable = [prompt.title, prompt.description, prompt.content, ...(prompt.tags || [])].join(" ").toLocaleLowerCase("ja");
       return !query || searchable.includes(query);
     });
+  // The chips list every tag in the library, whatever the tab or the search
+  // hides, so the row does not jump about while typing or switching tabs.
+  const allGroups = groupByTag(prompts);
+  if (selectedTag && !allGroups.some((group) => group.key === selectedTag)) selectedTag = "";
+  renderTagFilter(allGroups);
+  // The tag view picks its group below; every other tab keeps the list it has,
+  // narrowed to the prompts carrying the tag.
+  const tagged = selectedTag && currentFilter !== "tags"
+    ? matching.filter((prompt) => tagKeys(prompt).includes(selectedTag))
+    : matching;
   // The history is the most recently used first, so the one used a moment ago is
   // always at the top; every other view stays in title order.
   const visible = currentFilter === "history"
-    ? matching
+    ? tagged
       .filter((prompt) => usage[prompt.id])
       .sort((a, b) => usage[b.id] - usage[a.id])
       .slice(0, HISTORY_LIMIT)
-    : matching
+    : tagged
       .filter((prompt) => {
         if (currentFilter === "favorite") return prompt.favorite;
         if (currentFilter === "other") return !prompt.favorite;
@@ -162,18 +173,16 @@ function render() {
 
   let listItems;
   if (currentFilter === "tags") {
-    // The chips list every tag in the library, whatever the search hides, so
-    // the row does not jump about while typing.
-    const allGroups = groupByTag(prompts);
-    if (selectedTag && !allGroups.some((group) => group.key === selectedTag)) selectedTag = "";
-    renderTagFilter(allGroups);
     listItems = groupByTag(visible)
       .filter((group) => !selectedTag || group.key === selectedTag)
       .map(createTagGroup);
   } else {
     listItems = visible.map(createCard);
   }
-  els.tagFilterBar.classList.toggle("hidden", currentFilter !== "tags");
+  // A library with no tags at all would show a row of "タグなし" alone, which
+  // only the tag view (where it was always shown) has any use for.
+  const hasTags = allGroups.some((group) => group.label !== UNTAGGED_LABEL);
+  els.tagFilterBar.classList.toggle("hidden", !hasTags && currentFilter !== "tags");
   els.promptList.replaceChildren(...listItems);
   const isEmpty = listItems.length === 0;
   els.promptList.classList.toggle("hidden", isEmpty);
@@ -195,16 +204,23 @@ function render() {
   }
 }
 
+// The tags a prompt is grouped under: its own, or "タグなし" when it has none.
+function groupTags(prompt) {
+  const tags = Array.isArray(prompt.tags)
+    ? prompt.tags.map((tag) => tag.trim()).filter(Boolean)
+    : [];
+  return tags.length ? tags : [UNTAGGED_LABEL];
+}
+
+function tagKeys(prompt) {
+  return groupTags(prompt).map((tag) => tag.toLocaleLowerCase("ja"));
+}
+
 function groupByTag(items) {
   const groups = new Map();
 
   for (const prompt of items) {
-    const tags = Array.isArray(prompt.tags)
-      ? prompt.tags.map((tag) => tag.trim()).filter(Boolean)
-      : [];
-    const groupTags = tags.length ? tags : [UNTAGGED_LABEL];
-
-    for (const tag of groupTags) {
+    for (const tag of groupTags(prompt)) {
       const key = tag.toLocaleLowerCase("ja");
       if (!groups.has(key)) groups.set(key, { key, label: tag, prompts: [] });
       groups.get(key).prompts.push(prompt);

@@ -65,6 +65,7 @@ const els = {
   shortDialogTitle: document.querySelector("#shortDialogTitle"),
   shortId: document.querySelector("#shortId"),
   shortInput: document.querySelector("#shortInput"),
+  shortMemoInput: document.querySelector("#shortMemoInput"),
   shortTagsInput: document.querySelector("#shortTagsInput"),
   shortFavoriteInput: document.querySelector("#shortFavoriteInput"),
   deleteShortButton: document.querySelector("#deleteShortButton"),
@@ -320,6 +321,8 @@ function createCard(prompt) {
   if (usedAt) content.append(textSpan("card-used", usedAt));
   if (isShort(prompt)) {
     content.append(textSpan("card-summary", "短文"));
+    // The memo is kept as the description, so search and sync handle it as such.
+    if (prompt.description) content.append(textSpan("card-summary card-memo", prompt.description));
   } else if (prompt.description) {
     content.append(textSpan("card-summary", prompt.description));
   } else if (prompt.content) {
@@ -409,6 +412,7 @@ function openShortEditor(prompt = null) {
   els.shortInput.setCustomValidity("");
   els.shortId.value = prompt?.id || "";
   els.shortInput.value = prompt?.content || "";
+  els.shortMemoInput.value = prompt?.description || "";
   els.shortTagsInput.value = prompt?.tags?.join(", ") || "";
   els.shortFavoriteInput.checked = Boolean(prompt?.favorite);
   els.shortDialogTitle.textContent = prompt ? "短文を編集" : "短文を追加";
@@ -861,7 +865,7 @@ els.shortForm.addEventListener("submit", async (event) => {
     // The title is what search, sorting and older builds of this app use,
     // so it carries the phrase itself.
     title: content.slice(0, SHORT_TITLE_LENGTH),
-    description: "",
+    description: els.shortMemoInput.value.replace(/\s*\n\s*/g, " ").trim(),
     content,
     tags: parseTags(els.shortTagsInput.value),
     favorite: els.shortFavoriteInput.checked,

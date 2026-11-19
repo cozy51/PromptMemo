@@ -61,6 +61,7 @@ const els = {
   descriptionInput: document.querySelector("#descriptionInput"),
   contentInput: document.querySelector("#contentInput"),
   tagsInput: document.querySelector("#tagsInput"),
+  tagPicker: document.querySelector("#tagPicker"),
   favoriteInput: document.querySelector("#favoriteInput"),
   shortDialog: document.querySelector("#shortDialog"),
   shortForm: document.querySelector("#shortForm"),
@@ -69,6 +70,7 @@ const els = {
   shortInput: document.querySelector("#shortInput"),
   shortMemoInput: document.querySelector("#shortMemoInput"),
   shortTagsInput: document.querySelector("#shortTagsInput"),
+  shortTagPicker: document.querySelector("#shortTagPicker"),
   shortFavoriteInput: document.querySelector("#shortFavoriteInput"),
   deleteShortButton: document.querySelector("#deleteShortButton"),
   closeShortDialog: document.querySelector("#closeShortDialog"),
@@ -328,6 +330,41 @@ function parseTags(value) {
   return [...new Set(value.split(/[,、]/).map((tag) => tag.trim()).filter(Boolean))];
 }
 
+// Under each tag field, the tags already in the library as chips: one tap adds
+// the tag to the field, another takes it out.  Typing still works as before,
+// and the chips follow what is typed.
+function renderTagPicker(input, picker) {
+  const current = parseTags(input.value).map((tag) => tag.toLocaleLowerCase("ja"));
+  const groups = groupByTag(prompts).filter((group) => group.label !== UNTAGGED_LABEL);
+  picker.replaceChildren(...groups.map(({ key, label }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    const active = current.includes(key);
+    button.className = `tag-chip tag-pick${active ? " active" : ""}`;
+    button.dataset.tag = label;
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = label;
+    return button;
+  }));
+  picker.classList.toggle("hidden", groups.length === 0);
+}
+
+function toggleTagInField(input, picker, tag) {
+  const key = tag.toLocaleLowerCase("ja");
+  const tags = parseTags(input.value);
+  const kept = tags.filter((item) => item.toLocaleLowerCase("ja") !== key);
+  input.value = (kept.length < tags.length ? kept : [...tags, tag]).join(", ");
+  renderTagPicker(input, picker);
+}
+
+for (const [input, picker] of [[els.tagsInput, els.tagPicker], [els.shortTagsInput, els.shortTagPicker]]) {
+  input.addEventListener("input", () => renderTagPicker(input, picker));
+  picker.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-tag]");
+    if (chip) toggleTagInField(input, picker, chip.dataset.tag);
+  });
+}
+
 function isShort(prompt) {
   return prompt?.kind === "short";
 }
@@ -442,6 +479,7 @@ function openEditor(prompt = null) {
   els.descriptionInput.value = prompt?.description || "";
   els.contentInput.value = prompt?.content || "";
   els.tagsInput.value = prompt?.tags?.join(", ") || "";
+  renderTagPicker(els.tagsInput, els.tagPicker);
   els.favoriteInput.checked = Boolean(prompt?.favorite);
   els.dialogTitle.textContent = prompt ? "プロンプトを編集" : "新しいプロンプト";
   els.deleteButton.classList.toggle("hidden", !prompt);
@@ -462,6 +500,7 @@ function openShortEditor(prompt = null) {
   els.shortInput.value = prompt?.content || "";
   els.shortMemoInput.value = prompt?.description || "";
   els.shortTagsInput.value = prompt?.tags?.join(", ") || "";
+  renderTagPicker(els.shortTagsInput, els.shortTagPicker);
   els.shortFavoriteInput.checked = Boolean(prompt?.favorite);
   els.shortDialogTitle.textContent = prompt ? "短文を編集" : "短文を追加";
   els.deleteShortButton.classList.toggle("hidden", !prompt);

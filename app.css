@@ -116,6 +116,8 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
 .tag-chip.active { color: white; border-color: var(--accent); background: var(--accent); font-weight: 700; }
 .tag-chip-count { color: var(--muted); font-size: 10px; font-weight: 600; }
 .tag-chip.active .tag-chip-count { color: rgba(255, 255, 255, 0.8); }
+/* Existing tags under a tag field, to add one with a tap. */
+.tag-picker { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 /* A tag the open tab does not hold. */
 .tag-chip.unused:not(.active) { color: #b3bbb7; border-color: var(--line); background: transparent; cursor: default; }
 .tag-chip.unused:not(.active) .tag-chip-count { color: #c3cac6; }

@@ -116,6 +116,9 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
 .tag-chip.active { color: white; border-color: var(--accent); background: var(--accent); font-weight: 700; }
 .tag-chip-count { color: var(--muted); font-size: 10px; font-weight: 600; }
 .tag-chip.active .tag-chip-count { color: rgba(255, 255, 255, 0.8); }
+/* A tag the open tab does not hold. */
+.tag-chip.unused:not(.active) { color: #b3bbb7; border-color: var(--line); background: transparent; cursor: default; }
+.tag-chip.unused:not(.active) .tag-chip-count { color: #c3cac6; }
 
 #promptList {
   display: grid;
@@ -228,8 +231,9 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
    button, spanning the whole card. */
 .card-actions { grid-column: 2; grid-row: 2; }
 .card-prompt { display: none; }
-.tags { display: none; }
-.tag { padding: 3px 7px; border-radius: 5px; color: var(--accent); background: var(--accent-soft); font-size: 10px; }
+/* The tags as badges along the bottom of the card. */
+.tags { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.tag { padding: 2px 7px; border-radius: 5px; color: var(--accent); background: var(--accent-soft); font-size: 10px; font-weight: 600; line-height: 1.5; }
 .card-actions { display: flex; gap: 4px; margin: 0; }
 .card-actions .button { padding: 6px 7px; font-size: 10px; white-space: nowrap; }
 
@@ -602,6 +606,7 @@ label input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0
     -webkit-line-clamp: 4;
     line-clamp: 4;
   }
+  .tags { grid-row: 4; margin-top: 5px; }
   /* Cards in a row line up even when their texts differ in length. */
   .prompt-card { align-content: start; }
   .card-actions .button { padding: 7px 12px; font-size: 11px; }

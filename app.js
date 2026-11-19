@@ -148,9 +148,12 @@ function render() {
     });
   // The chips list every tag in the library, whatever the tab or the search
   // hides, so the row does not jump about while typing or switching tabs.
+  // Each counts what it holds in the open tab (the search aside), and a tag
+  // with nothing there is greyed out.
   const allGroups = groupByTag(prompts);
   selectedTags = selectedTags.filter((key) => allGroups.some((group) => group.key === key));
-  renderTagFilter(allGroups);
+  const tabCounts = new Map(groupByTag(inTab(prompts)).map((group) => [group.key, group.prompts.length]));
+  renderTagFilter(allGroups, tabCounts);
   // Every tab, the tag view included, keeps only the prompts carrying all the
   // picked tags.
   const tagged = selectedTags.length
@@ -159,25 +162,7 @@ function render() {
       return selectedTags.every((key) => keys.includes(key));
     })
     : matching;
-  // The history is the most recently used first, so the one used a moment ago is
-  // always at the top; every other view stays in title order.
-  const visible = currentFilter === "history"
-    ? tagged
-      .filter((prompt) => usage[prompt.id])
-      .sort((a, b) => usage[b.id] - usage[a.id])
-      .slice(0, HISTORY_LIMIT)
-    : tagged
-      .filter((prompt) => {
-        if (currentFilter === "favorite") return prompt.favorite;
-        // Short phrases have a tab of their own, so "other" is the rest of the prompts.
-        if (currentFilter === "other") return !prompt.favorite && !isShort(prompt);
-        if (currentFilter === "short") return isShort(prompt);
-        return true;
-      })
-      .sort((a, b) =>
-        TITLE_COLLATOR.compare(a.title, b.title) ||
-        b.updatedAt - a.updatedAt
-      );
+  const visible = inTab(tagged);
 
   let listItems;
   if (currentFilter === "tags") {
@@ -224,6 +209,30 @@ function tagKeys(prompt) {
   return groupTags(prompt).map((tag) => tag.toLocaleLowerCase("ja"));
 }
 
+// The prompts the open tab lists, in its order.  The history is the most
+// recently used first, so the one used a moment ago is always at the top; every
+// other view stays in title order.
+function inTab(items) {
+  if (currentFilter === "history") {
+    return items
+      .filter((prompt) => usage[prompt.id])
+      .sort((a, b) => usage[b.id] - usage[a.id])
+      .slice(0, HISTORY_LIMIT);
+  }
+  return items
+    .filter((prompt) => {
+      if (currentFilter === "favorite") return prompt.favorite;
+      // Short phrases have a tab of their own, so "other" is the rest of the prompts.
+      if (currentFilter === "other") return !prompt.favorite && !isShort(prompt);
+      if (currentFilter === "short") return isShort(prompt);
+      return true;
+    })
+    .sort((a, b) =>
+      TITLE_COLLATOR.compare(a.title, b.title) ||
+      b.updatedAt - a.updatedAt
+    );
+}
+
 function groupByTag(items) {
   const groups = new Map();
 
@@ -253,12 +262,16 @@ function toggleTag(current, key) {
   return [...current.filter((item) => item !== untagged), key];
 }
 
-function renderTagFilter(groups) {
+function renderTagFilter(groups, counts) {
   const chip = (key, label, count) => {
     const button = document.createElement("button");
     button.type = "button";
     const active = key ? selectedTags.includes(key) : !selectedTags.length;
-    button.className = `tag-chip${active ? " active" : ""}`;
+    // A tag the tab does not hold cannot be picked, but one already picked can
+    // still be dropped.
+    const empty = count === 0;
+    button.className = `tag-chip${active ? " active" : ""}${empty ? " unused" : ""}`;
+    button.disabled = empty && !active;
     button.dataset.tag = key;
     button.setAttribute("aria-pressed", String(active));
     button.textContent = label;
@@ -267,7 +280,7 @@ function renderTagFilter(groups) {
   };
   els.tagFilterBar.replaceChildren(
     chip("", "すべて", null),
-    ...groups.map((group) => chip(group.key, group.label, group.prompts.length))
+    ...groups.map((group) => chip(group.key, group.label, counts.get(group.key) || 0))
   );
 }
 

@@ -206,6 +206,24 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
   await settle();
   check(noTags.el("tagFilterBar").classList.contains("hidden"), true, "A library with no tags keeps the row out of the way");
 
+  // 7a. The chips count what the open tab holds, and grey out what it does not.
+  const counted = openPopup({
+    prompts: [
+      prompt("f1", { tags: ["GEM"], favorite: true }),
+      prompt("o1", { tags: ["GEM"] }),
+      prompt("o2", { tags: ["GPTs"] }),
+      prompt("s1", { tags: ["GEM"], kind: "short" })
+    ]
+  });
+  const chipState = () => counted.el("tagFilterBar").children.slice(1)
+    .map((chip) => `${chip.textContent}${chip.children[0].textContent}${chip.disabled ? "×" : ""}`);
+  await counted.show("other");
+  check(chipState(), ["GEM1", "GPTs1"], "The other tab counts its own prompts");
+  await counted.show("short");
+  check(chipState(), ["GEM1", "GPTs0×"], "The short tab counts short phrases alone, greying out the rest");
+  await counted.show("favorite");
+  check(chipState(), ["GEM1", "GPTs0×"], "…and so does every other tab");
+
   // 7b. Short phrases have their own tab and stay out of "other".
   const mixed = openPopup({ prompts: [prompt("p"), prompt("s", { kind: "short" })] });
   await mixed.show("other");

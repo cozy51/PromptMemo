@@ -82,9 +82,10 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
       el("tagFilterBar").dispatch("click", { target: { closest: () => ({ dataset: { tag } }) } });
       await settle();
     },
-    async saveShort(text, { favorite = false } = {}) {
+    async saveShort(text, { favorite = false, tags = "" } = {}) {
       el("addShortButton").dispatch("click");
       el("shortInput").value = text;
+      el("shortTagsInput").value = tags;
       el("shortFavoriteInput").checked = favorite;
       el("shortForm").dispatch("submit");
       await settle();
@@ -119,11 +120,12 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
     "Using a prompt does not edit it, so it never reaches the cloud as a change");
 
   // 3. A short phrase is registered from the text alone.
-  await popup.saveShort("200字程度で\n要約してください。", { favorite: true });
+  await popup.saveShort("200字程度で\n要約してください。", { favorite: true, tags: "要約、 文章, 要約" });
   const saved = popup.store.promptMemoItems.find((item) => item.kind === "short");
   check(saved.content, "200字程度で 要約してください。", "Line breaks fold into one line");
   check(saved.title, saved.content, "The phrase is its own title");
   check(saved.favorite, true, "…and can be a favourite");
+  check(saved.tags, ["要約", "文章"], "…and carries tags, split on either comma, without duplicates");
   check(popup.el("shortDialog").open, false, "The dialog closes after saving");
 
   await popup.show("short");

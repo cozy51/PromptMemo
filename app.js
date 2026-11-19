@@ -65,6 +65,7 @@ const els = {
   shortDialogTitle: document.querySelector("#shortDialogTitle"),
   shortId: document.querySelector("#shortId"),
   shortInput: document.querySelector("#shortInput"),
+  shortTagsInput: document.querySelector("#shortTagsInput"),
   shortFavoriteInput: document.querySelector("#shortFavoriteInput"),
   deleteShortButton: document.querySelector("#deleteShortButton"),
   closeShortDialog: document.querySelector("#closeShortDialog"),
@@ -273,6 +274,11 @@ function createTagGroup({ label, prompts: taggedPrompts }) {
   return group;
 }
 
+// Tags are typed as one comma-separated line ("," or "、"), duplicates dropped.
+function parseTags(value) {
+  return [...new Set(value.split(/[,、]/).map((tag) => tag.trim()).filter(Boolean))];
+}
+
 function isShort(prompt) {
   return prompt?.kind === "short";
 }
@@ -403,6 +409,7 @@ function openShortEditor(prompt = null) {
   els.shortInput.setCustomValidity("");
   els.shortId.value = prompt?.id || "";
   els.shortInput.value = prompt?.content || "";
+  els.shortTagsInput.value = prompt?.tags?.join(", ") || "";
   els.shortFavoriteInput.checked = Boolean(prompt?.favorite);
   els.shortDialogTitle.textContent = prompt ? "短文を編集" : "短文を追加";
   els.deleteShortButton.classList.toggle("hidden", !prompt);
@@ -806,7 +813,7 @@ els.form.addEventListener("submit", async (event) => {
     title,
     description: els.descriptionInput.value.trim(),
     content: els.contentInput.value.trim(),
-    tags: [...new Set(els.tagsInput.value.split(/[,、]/).map((tag) => tag.trim()).filter(Boolean))],
+    tags: parseTags(els.tagsInput.value),
     favorite: els.favoriteInput.checked,
     updatedAt: now
   };
@@ -856,7 +863,7 @@ els.shortForm.addEventListener("submit", async (event) => {
     title: content.slice(0, SHORT_TITLE_LENGTH),
     description: "",
     content,
-    tags: existing?.tags || [],
+    tags: parseTags(els.shortTagsInput.value),
     favorite: els.shortFavoriteInput.checked,
     updatedAt: Date.now(),
     kind: "short"

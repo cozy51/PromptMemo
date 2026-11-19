@@ -182,14 +182,21 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
   check(tagged.groups(), ["GEM", "GPTs", "タグなし"], "Every tag is shown to begin with");
   await tagged.pickTag("gpts");
   check(tagged.groups(), ["GPTs"], "Picking a tag shows that tag alone");
-  check(tagged.store.promptMemoSelectedTag, "gpts", "…and the pick is remembered");
+  check(tagged.store.promptMemoSelectedTag, ["gpts"], "…and the pick is remembered");
   const reopened = openPopup({ prompts: tagged.store.promptMemoItems, saved: { promptMemoSelectedTag: "gpts" } });
   await reopened.show("tags");
-  check(reopened.groups(), ["GPTs"], "The next visit opens on the same tag");
+  check(reopened.groups(), ["GPTs"], "The next visit opens on the same tag, even as saved by an older build");
   await tagged.show("other");
   check(tagged.titles(), ["題名g2", "題名p1"], "In another tab the picked tag narrows the list");
+  await tagged.pickTag("gem");
+  check(tagged.titles(), ["題名g2"], "Picking a second tag keeps only the prompts carrying both");
+  check(tagged.store.promptMemoSelectedTag, ["gpts", "gem"], "…and both picks are remembered");
+  await tagged.pickTag("gpts");
+  check(tagged.titles(), ["題名g1", "題名g2"], "Picking a tag again drops it");
   await tagged.pickTag("タグなし");
-  check(tagged.titles(), ["題名n1"], "…including the prompts with no tag");
+  check(tagged.titles(), ["題名n1"], "「タグなし」 shows the prompts with no tag, replacing the other picks");
+  await tagged.pickTag("gem");
+  check(tagged.titles(), ["題名g1", "題名g2"], "…and a tag replaces 「タグなし」");
   await tagged.pickTag("");
   check(tagged.titles(), ["題名g1", "題名g2", "題名n1", "題名p1"], "「すべて」 shows the whole tab again");
   await tagged.show("tags");
@@ -198,6 +205,13 @@ function openPopup({ prompts = [], usage = null, saved = {} } = {}) {
   const noTags = openPopup({ prompts: [prompt("a")] });
   await settle();
   check(noTags.el("tagFilterBar").classList.contains("hidden"), true, "A library with no tags keeps the row out of the way");
+
+  // 7b. Short phrases have their own tab and stay out of "other".
+  const mixed = openPopup({ prompts: [prompt("p"), prompt("s", { kind: "short" })] });
+  await mixed.show("other");
+  check(mixed.titles(), ["題名p"], "The other tab leaves short phrases to their own tab");
+  await mixed.show("short");
+  check(mixed.titles(), ["本文s"], "…where they are listed");
 
   // 8. An empty history explains itself instead of saying nothing was found.
   const fresh = openPopup({ prompts: [prompt("a")] });

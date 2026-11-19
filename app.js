@@ -2,8 +2,9 @@ const STORAGE_KEY = "promptMemoItems";
 const DATA_UPDATED_AT_KEY = "promptMemoDataUpdatedAt";
 const CONFIRMATION_SETTINGS_KEY = "promptMemoConfirmationSettings";
 const COLLAPSED_TAGS_KEY = "promptMemoCollapsedTags";
-// The tag picked in the tag row ("" shows every tag), remembered across visits.
-// The row is shown in every tab, and the pick narrows whichever tab is open.
+// The tags picked in the tag row (none shows everything), remembered across
+// visits.  The row is shown in every tab, and narrows whichever tab is open to
+// the prompts carrying every picked tag.  Older builds stored a single string.
 const SELECTED_TAG_KEY = "promptMemoSelectedTag";
 const UNTAGGED_LABEL = "タグなし";
 // When each prompt was last copied in this browser.  It is kept apart from
@@ -101,7 +102,7 @@ let confirmationSettings = {
   fullRestore: true
 };
 let collapsedTags = new Set();
-let selectedTag = "";
+let selectedTags = [];
 let usage = {};
 let pendingConfirmation = null;
 let pendingImport = null;
@@ -120,7 +121,10 @@ async function init() {
   collapsedTags = new Set(
     Array.isArray(result[COLLAPSED_TAGS_KEY]) ? result[COLLAPSED_TAGS_KEY] : []
   );
-  selectedTag = typeof result[SELECTED_TAG_KEY] === "string" ? result[SELECTED_TAG_KEY] : "";
+  const savedTags = result[SELECTED_TAG_KEY];
+  selectedTags = Array.isArray(savedTags)
+    ? savedTags.filter((tag) => typeof tag === "string" && tag)
+    : typeof savedTags === "string" && savedTags ? [savedTags] : [];
   usage = result[USAGE_KEY] && typeof result[USAGE_KEY] === "object" ? result[USAGE_KEY] : {};
   confirmationSettings = {
     ...confirmationSettings,
@@ -145,12 +149,15 @@ function render() {
   // The chips list every tag in the library, whatever the tab or the search
   // hides, so the row does not jump about while typing or switching tabs.
   const allGroups = groupByTag(prompts);
-  if (selectedTag && !allGroups.some((group) => group.key === selectedTag)) selectedTag = "";
+  selectedTags = selectedTags.filter((key) => allGroups.some((group) => group.key === key));
   renderTagFilter(allGroups);
-  // The tag view picks its group below; every other tab keeps the list it has,
-  // narrowed to the prompts carrying the tag.
-  const tagged = selectedTag && currentFilter !== "tags"
-    ? matching.filter((prompt) => tagKeys(prompt).includes(selectedTag))
+  // Every tab, the tag view included, keeps only the prompts carrying all the
+  // picked tags.
+  const tagged = selectedTags.length
+    ? matching.filter((prompt) => {
+      const keys = tagKeys(prompt);
+      return selectedTags.every((key) => keys.includes(key));
+    })
     : matching;
   // The history is the most recently used first, so the one used a moment ago is
   // always at the top; every other view stays in title order.
@@ -162,7 +169,8 @@ function render() {
     : tagged
       .filter((prompt) => {
         if (currentFilter === "favorite") return prompt.favorite;
-        if (currentFilter === "other") return !prompt.favorite;
+        // Short phrases have a tab of their own, so "other" is the rest of the prompts.
+        if (currentFilter === "other") return !prompt.favorite && !isShort(prompt);
         if (currentFilter === "short") return isShort(prompt);
         return true;
       })
@@ -174,7 +182,7 @@ function render() {
   let listItems;
   if (currentFilter === "tags") {
     listItems = groupByTag(visible)
-      .filter((group) => !selectedTag || group.key === selectedTag)
+      .filter((group) => !selectedTags.length || selectedTags.includes(group.key))
       .map(createTagGroup);
   } else {
     listItems = visible.map(createCard);
@@ -235,13 +243,24 @@ function groupByTag(items) {
     });
 }
 
+// "すべて" clears the picks; any other chip toggles.  "タグなし" cannot be
+// combined with a tag (nothing would match), so picking one drops the other.
+function toggleTag(current, key) {
+  if (!key) return [];
+  if (current.includes(key)) return current.filter((item) => item !== key);
+  const untagged = UNTAGGED_LABEL.toLocaleLowerCase("ja");
+  if (key === untagged) return [key];
+  return [...current.filter((item) => item !== untagged), key];
+}
+
 function renderTagFilter(groups) {
   const chip = (key, label, count) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `tag-chip${key === selectedTag ? " active" : ""}`;
+    const active = key ? selectedTags.includes(key) : !selectedTags.length;
+    button.className = `tag-chip${active ? " active" : ""}`;
     button.dataset.tag = key;
-    button.setAttribute("aria-pressed", String(key === selectedTag));
+    button.setAttribute("aria-pressed", String(active));
     button.textContent = label;
     if (count !== null) button.append(textSpan("tag-chip-count", String(count)));
     return button;
@@ -264,7 +283,7 @@ function createTagGroup({ label, prompts: taggedPrompts }) {
   toggle.type = "button";
   toggle.dataset.tagKey = label.toLocaleLowerCase("ja");
   // A tag picked on its own is shown open: a lone folded heading would look empty.
-  const collapsed = !selectedTag && collapsedTags.has(toggle.dataset.tagKey);
+  const collapsed = !selectedTags.length && collapsedTags.has(toggle.dataset.tagKey);
   toggle.setAttribute("aria-expanded", String(!collapsed));
 
   const arrow = document.createElement("span");
@@ -796,8 +815,8 @@ els.filterBar.addEventListener("click", (event) => {
 els.tagFilterBar.addEventListener("click", async (event) => {
   const chip = event.target.closest("[data-tag]");
   if (!chip) return;
-  selectedTag = chip.dataset.tag;
-  await promptMemoStorage.set({ [SELECTED_TAG_KEY]: selectedTag });
+  selectedTags = toggleTag(selectedTags, chip.dataset.tag);
+  await promptMemoStorage.set({ [SELECTED_TAG_KEY]: selectedTags });
   render();
 });
 
